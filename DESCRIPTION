@@ -1,0 +1,30 @@
+Package: READMEBuilder
+Title: Guided README Generation for Reproducible Research
+Version: 0.1.0
+Authors@R: 
+    person("Ed", "Ivimey-Cook",
+           email = "e.ivimeycook@gmail.com",
+           role  = c("aut", "cre"),
+           comment = c(ORCID = "0000-0002-1974-1370"))
+Description: A Shiny application that walks researchers through building a
+    high-quality README file for research datasets and code. Automatically
+    describes tabular data columns (ranges, levels, NAs), detects R package
+    dependencies from scripts, supports script run-order documentation, and
+    exports a formatted README.md.
+License: MIT + file LICENSE
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.3.3
+Imports:
+    shiny (>= 1.7.0),
+    bslib (>= 0.5.0),
+    shinyFiles,
+    tidyverse,
+    readxl,
+    stringr,
+    purrr,
+    fs
+Suggests:
+    devtools
+URL: https://github.com/EIvimeyCook/READMEBuilder
+BugReports: https://github.com/EIvimeyCook/READMEBuilder/issues
