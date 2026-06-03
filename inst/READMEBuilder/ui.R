@@ -62,6 +62,17 @@ ui <- page_fluid(
     .card { box-shadow: 0 1px 4px rgba(0,0,0,0.07); }
     .card-header { font-weight: 600; font-size: 0.93rem; }
     textarea { resize: vertical; }
+    .rb-tree {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.8rem;
+      line-height: 1.45;
+      background: #f4f6f8;
+      padding: 0.75rem 1rem;
+      border-radius: 6px;
+      white-space: pre;
+      overflow-x: auto;
+      margin: 0;
+    }
   "))),
 
   div(class = "d-flex",
@@ -92,12 +103,12 @@ ui <- page_fluid(
             textAreaInput("description", "Description", rows = 3,
                           placeholder = "A concise description of what this project/dataset is."),
             textAreaInput("abstract", "Abstract", rows = 4,
-                          placeholder = "The full abstract \u2014 aims, methods, main findings."),
+                          placeholder = "The full abstract — aims, methods, main findings."),
             textAreaInput("instructions", "Instructions for use", rows = 3,
-                          placeholder = "How to reproduce the analysis. E.g. 'Run scripts in order. Requires R \u2265 4.3.'"),
+                          placeholder = "How to reproduce the analysis. E.g. 'Run scripts in order. Requires R ≥ 4.3.'"),
             textAreaInput("additional_info", "Additional information", rows = 3,
                           placeholder = "Known issues, limitations, related datasets, links to protocols, etc."),
-            textAreaInput("doi", "DOI(s) \u2014 separate multiple with \";\"", rows = 2,
+            textAreaInput("doi", "DOI(s) — separate multiple with \";\"", rows = 2,
                           placeholder = "10.1234/journal.xyz; 10.5678/zenodo.abc"),
             textAreaInput("citation_text", "Full citation text", rows = 3,
                           placeholder = "Smith J, Doe J (2024). Title. Journal. 10.1234/xyz"),
@@ -122,14 +133,14 @@ ui <- page_fluid(
           ),
           card(
             card_header(icon("users"), " People & Funding"),
-            textAreaInput("authors", "Authors \u2014 one per line (include ORCID if available)", rows = 4,
+            textAreaInput("authors", "Authors — one per line (include ORCID if available)", rows = 4,
                           placeholder = "Jane Smith (0000-0001-2345-6789)\nJohn Doe (0000-0002-3456-7890)"),
-            textAreaInput("affiliation", "Affiliations \u2014 one per line", rows = 3,
+            textAreaInput("affiliation", "Affiliations — one per line", rows = 3,
                           placeholder = "Department of Biology, University of Example\nAnother Institute, Another University"),
             textInput("contact", "Corresponding author / contact email",
                       placeholder = "j.smith@example.ac.uk"),
-            textAreaInput("funders", "Funders & grant numbers \u2014 one per line", rows = 3,
-                          placeholder = "NERC \u2014 NE/X000000/1\nERC Starting Grant \u2014 123456"),
+            textAreaInput("funders", "Funders & grant numbers — one per line", rows = 3,
+                          placeholder = "NERC — NE/X000000/1\nERC Starting Grant — 123456"),
             textAreaInput("acknowledgements", "Additional acknowledgements", rows = 2)
           )
         )
@@ -139,19 +150,21 @@ ui <- page_fluid(
       conditionalPanel("input.main_nav === 'tab_files'",
         layout_sidebar(fillable = FALSE,
           sidebar = sidebar(title = "Load a folder", width = 240,
-            shinyDirButton("folder_btn", "Browse for folder\u2026",
+            shinyDirButton("folder_btn", "Browse for folder…",
                            title = "Select your project folder",
                            class = "btn-primary w-100", icon = icon("folder-open")),
             br(),
             uiOutput("folder_label"),
             hr(),
             helpText(
-              icon("table"), " CSV / TSV / XLSX \u2192 auto-described", br(), br(),
-              icon("code"),  " R / Rmd \u2192 ordered in Script Order",  br(), br(),
-              icon("file"),  " Everything else \u2192 describe freely"
+              icon("table"), " CSV / TSV / XLSX → auto-described", br(), br(),
+              icon("code"),  " R / Rmd → ordered in Script Order",  br(), br(),
+              icon("file"),  " Everything else → describe freely"
             ),
             uiOutput("file_summary_ui")
           ),
+          # Directory map (live preview) sits above the per-file cards.
+          uiOutput("dir_map_ui"),
           uiOutput("files_ui")
         )
       ),
@@ -194,7 +207,7 @@ ui <- page_fluid(
           ),
           card_body(
             p(class = "text-muted small",
-              "Raw Markdown \u2014 copy or download as ", code("README.md"), "."),
+              "Raw Markdown — copy or download as ", code("README.md"), "."),
             verbatimTextOutput("preview")
           )
         )

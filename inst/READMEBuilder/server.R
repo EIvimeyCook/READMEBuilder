@@ -16,6 +16,11 @@ server <- function(input, output, session) {
     pkg_diag     = NULL
   )
 
+  # Root label used for the directory map (folder basename, or a fallback).
+  tree_root <- reactive({
+    if (!is.null(rv$folder) && nzchar(rv$folder)) basename(rv$folder) else "project"
+  })
+
   # ── Load folder ──────────────────────────────────────────────────────────────
   observeEvent(input$folder_btn, {
     req(is.list(input$folder_btn))
@@ -50,6 +55,20 @@ server <- function(input, output, session) {
       icon("code"),  " ", length(rv$script_idx), " scripts"))
   })
 
+  # ── Directory map (live preview) ──────────────────────────────────────────────
+  output$dir_map_ui <- renderUI({
+    req(length(rv$files) > 0)
+    tree <- build_dir_tree(rv$files, root = tree_root())
+    card(class = "mb-3",
+      card_header(icon("sitemap"), " Directory map"),
+      card_body(
+        p(class = "text-muted small mb-2",
+          "Tree of the loaded folder. This block is included in the exported ",
+          code("README.md"), " under ", strong("Directory Structure"), "."),
+        tags$pre(class = "rb-tree", paste(tree, collapse = "\n"))
+      ))
+  })
+
   # ── File cards ───────────────────────────────────────────────────────────────
   output$files_ui <- renderUI({
     if (!length(rv$files))
@@ -70,9 +89,9 @@ server <- function(input, output, session) {
         col_rows <- map(a$cols, function(col_d) {
           unit_cell <- if (col_d$type == "numeric")
             textInput(paste0("unit_", i, "_", col_d$name), label = NULL,
-                      placeholder = "e.g. mm, g, \u00B0C")
+                      placeholder = "e.g. mm, g, °C")
           else
-            tags$span(class = "text-muted small", "\u2014")
+            tags$span(class = "text-muted small", "—")
           tags$tr(
             tags$td(style = "width:22%;vertical-align:middle;padding:4px 6px",
                     tags$code(style = "font-size:0.82rem", col_d$name),
@@ -91,8 +110,8 @@ server <- function(input, output, session) {
         tagList(
           tags$hr(),
           tags$p(class = "text-muted small mb-1",
-                 icon("table"), " ", a$nrow, " rows \u00D7 ", a$ncol,
-                 " cols \u2014 add a description for each column; units for numeric columns:"),
+                 icon("table"), " ", a$nrow, " rows × ", a$ncol,
+                 " cols — add a description for each column; units for numeric columns:"),
           tags$table(class = "table table-sm table-bordered small mb-0",
             tags$thead(class = "table-light",
               tags$tr(tags$th("Column"), tags$th("Auto-summary"),
@@ -101,7 +120,7 @@ server <- function(input, output, session) {
           tags$hr(),
           layout_column_wrap(width = "200px", gap = "0.5rem",
             textInput(paste0("collection_date_", i), "Date(s) of data collection",
-                      placeholder = "e.g. June\u2013August 2022"),
+                      placeholder = "e.g. June–August 2022"),
             textInput(paste0("collection_location_", i), "Location of data collection",
                       placeholder = "e.g. Cairngorms NP, Scotland, UK")
           )
@@ -185,7 +204,7 @@ server <- function(input, output, session) {
     if (nrow(rv$pkgs) == 0)
       return(tagList(diag_box,
         p(class = "text-muted mt-2",
-          "No packages found. Check the folder above \u2014 if 0 R files were found, ",
+          "No packages found. Check the folder above — if 0 R files were found, ",
           "scripts may not contain ", code("library()"), " or ", code("require()"), " calls.")))
     tagList(diag_box, hr(),
       p(strong(nrow(rv$pkgs), " packages detected"), " | R ",
@@ -260,7 +279,8 @@ server <- function(input, output, session) {
       script_descs = get_script_descs(),
       units_list   = get_units(),
       col_descs    = get_col_descs(),
-      file_extras  = get_file_extras()
+      file_extras  = get_file_extras(),
+      root         = tree_root()
     )
   })
 
