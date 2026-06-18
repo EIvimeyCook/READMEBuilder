@@ -1,5 +1,5 @@
 # inst/READMEBuilder/ui.R
-# All objects from global.R (logo_svg, helpers) are available here.
+# All objects from global.R (logo_svg, helpers, license_choices) are available here.
 
 ui <- page_fluid(
   title = "READMEBuilder",
@@ -73,6 +73,7 @@ ui <- page_fluid(
       overflow-x: auto;
       margin: 0;
     }
+    .rb-import .card-header { background: #e8f4f6; }
   "))),
 
   div(class = "d-flex",
@@ -95,6 +96,31 @@ ui <- page_fluid(
 
       # 1 · Project Info ────────────────────────────────────────────────────────
       conditionalPanel("input.main_nav === 'tab_project'",
+
+        # Import / edit an existing READMEBuilder README ──────────────────────────
+        card(class = "mb-3 rb-import",
+          card_header(icon("file-import"), " Edit an existing README"),
+          card_body(
+            p(class = "text-muted small mb-2",
+              "Upload a ", code("README.md"), " previously made with READMEBuilder to ",
+              "reload everything: project info, the file list, column descriptions & units, ",
+              "script order, and the R / package versions. Then edit and re-export."),
+            layout_column_wrap(width = "260px", gap = "0.75rem",
+              fileInput("import_md", NULL,
+                        accept = c(".md", ".markdown", "text/markdown"),
+                        buttonLabel = "Choose README.md…",
+                        placeholder = "No file selected"),
+              div(class = "pt-1",
+                actionButton("reimport_btn", "Import / Re-import",
+                             class = "btn-primary", icon = icon("rotate")),
+                actionButton("clear_import", "Clear",
+                             class = "btn-outline-secondary ms-1", icon = icon("eraser"))
+              )
+            ),
+            uiOutput("import_status")
+          )
+        ),
+
         div(class = "rb-two-col",
           card(
             card_header(icon("file-lines"), " Basic Details"),
@@ -112,24 +138,13 @@ ui <- page_fluid(
                           placeholder = "10.1234/journal.xyz; 10.5678/zenodo.abc"),
             textAreaInput("citation_text", "Full citation text", rows = 3,
                           placeholder = "Smith J, Doe J (2024). Title. Journal. 10.1234/xyz"),
-            selectInput("license", "License",
-                        choices = c(
-                          "None / unspecified" = "",
-                          "CC0 1.0 (public domain)", "CC BY 4.0", "CC BY 2.0",
-                          "CC BY-SA 4.0", "CC BY-NC 4.0", "CC BY-NC 2.0",
-                          "CC BY-NC-SA 4.0", "CC BY-ND 4.0", "CC BY-NC-ND 4.0",
-                          "MIT", "MIT No Attribution (MIT-0)", "Apache 2.0",
-                          "GPL-2.0", "GPL-3.0", "LGPL-2.1", "LGPL-3.0",
-                          "AGPL-3.0", "MPL-2.0", "EUPL-1.2",
-                          "BSD 2-Clause", "BSD 3-Clause", "ISC", "Artistic-2.0",
-                          "ODC-By 1.0 (Open Data Commons Attribution)",
-                          "ODbL 1.0 (Open Database Licence)",
-                          "PDDL 1.0 (Public Domain Dedication & Licence)",
-                          "Open Government Licence v3.0 (UK)",
-                          "Open Government Licence v2.0 (UK)",
-                          "Etalab Open Licence 2.0 (France)",
-                          "Unlicense", "WTFPL", "All rights reserved"
-                        ))
+            # Two separate licences (free-typed values allowed, e.g. "CC-BY-4.0").
+            layout_column_wrap(width = "220px", gap = "0.75rem",
+              selectizeInput("license_code", "Code license", choices = license_choices,
+                             options = list(create = TRUE, placeholder = "Select or type…")),
+              selectizeInput("license_data", "Data license", choices = license_choices,
+                             options = list(create = TRUE, placeholder = "Select or type…"))
+            )
           ),
           card(
             card_header(icon("users"), " People & Funding"),
