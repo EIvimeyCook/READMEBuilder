@@ -161,9 +161,15 @@ auto-summaries from the underlying data, re-load the project folder on the
 
 ## Privacy
 
-`build_readme()` launches a Shiny app that runs locally on your computer. Folder
-browsing, file reading, and package resolution all happen on your machine, and
-nothing is uploaded to any server.
+`build_readme()` launches a Shiny app that runs locally on your computer. Your
+files and their contents stay on your machine: folder browsing, file reading, and
+package resolution all happen locally, and nothing you load is uploaded to any
+server.
+
+The one exception is cosmetic. The app's theme uses the Inter font from Google
+Fonts, so on first launch it fetches that font from Google's servers (and caches
+it afterwards). No file data is included in that request. If you want zero
+external calls, swap the theme to a system font.
 
 ## Requirements
 
