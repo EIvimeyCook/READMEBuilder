@@ -202,4 +202,4 @@ Released under the [MIT License](LICENSE.md).
 
 ## AI Declaration
 
-Claude Sonnet 4.6 was used in the development of this package.
+Claude Sonnet 4.6 nad Opus 4.8 were used in the development of this package.
