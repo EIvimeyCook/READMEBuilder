@@ -201,6 +201,22 @@ auto_describe <- function(path) {
 }
 
 # ── extract_packages() ────────────────────────────────────────────────────────
+# Detects R package dependencies from source and resolves their versions.
+#
+# Detection covers:
+#   * library(pkg) / require(pkg) / requireNamespace("pkg")
+#   * namespace calls  pkg::fun  and  pkg:::fun
+#   * pacman::p_load(a, b, c)  and  p_load(a, b, c)
+#
+# Version resolution: if an renv.lock is present in the folder, the versions
+# (and the R version) recorded there are used in preference to whatever is
+# installed in the current session; anything detected but not in the lockfile
+# falls back to packageVersion(). Reading renv.lock needs the 'jsonlite'
+# package; if it is missing, the lockfile step is skipped and installed
+# versions are used.
+#
+# Returns a list: $pkgs (tibble Package/Version), $n_files, $n_total, $folder,
+# $filenames, $lock_file, $lock_r_version, $n_from_lock.
 
 extract_packages <- function(folder) {
   folder    <- normalizePath(folder, mustWork = FALSE)
@@ -208,35 +224,110 @@ extract_packages <- function(folder) {
                            recursive = TRUE, full.names = TRUE, all.files = TRUE)
   all_files <- list.files(folder, recursive = TRUE, full.names = FALSE)
 
-  empty <- list(pkgs = tibble(Package = character(), Version = character()),
-                n_files = 0L, n_total = length(all_files),
-                folder = folder, filenames = character(0))
-
-  if (!length(r_files)) return(empty)
-
+  # ---- collect package names from source ----
   pkgs <- character(0)
   for (f in r_files) {
     lines <- tryCatch(readLines(f, warn = FALSE), error = function(e) character(0))
     if (!length(lines)) next
-    lines <- lines[!str_detect(lines, "^\\s*#")]
+    lines <- lines[!str_detect(lines, "^\\s*#")]          # drop whole-line comments
     text  <- paste(lines, collapse = "\n")
-    m     <- str_match_all(text,
-      "(?:library|require)\\s*\\(\\s*[\"']?([A-Za-z][A-Za-z0-9._]*)[\"']?")[[1]]
-    if (nrow(m) > 0) pkgs <- c(pkgs, m[, 2])
-  }
 
+    # library(pkg) / require(pkg) / requireNamespace("pkg")
+    # Lookbehind so substrings like groundhog.library( or bookshelf( don't match.
+    m1 <- str_match_all(text,
+      "(?<![A-Za-z0-9._])(?:library|require|requireNamespace)\\s*\\(\\s*[\"']?([A-Za-z][A-Za-z0-9._]*)[\"']?")[[1]]
+    if (nrow(m1) > 0) pkgs <- c(pkgs, m1[, 2])
+
+    # namespace calls: pkg::fun and pkg:::fun. Also catches the loader packages
+    # themselves when namespaced (pacman, librarian, import, groundhog).
+    m2 <- str_match_all(text, "([A-Za-z][A-Za-z0-9.]*):::?")[[1]]
+    if (nrow(m2) > 0) pkgs <- c(pkgs, m2[, 2])
+
+    # Flat comma-lists: pacman::p_load(...) and librarian::shelf(...)
+    fl <- str_match_all(text, paste0(
+      "(?<![A-Za-z0-9._])(?:pacman::)?p_load\\s*\\(([^)]*)\\)",
+      "|(?<![A-Za-z0-9._])(?:librarian::)?shelf\\s*\\(([^)]*)\\)"))[[1]]
+    if (nrow(fl) > 0) {
+      arg_lists <- c(fl[, 2], fl[, 3])
+      arg_lists <- arg_lists[!is.na(arg_lists) & nzchar(arg_lists)]
+      for (args in arg_lists) {
+        toks <- str_trim(str_replace_all(str_split(args, ",")[[1]], "[\"']", ""))
+        toks <- toks[!str_detect(toks, "=")]                       # drop named args
+        toks <- toks[str_detect(toks, "^[A-Za-z][A-Za-z0-9._]*$")] # keep identifiers
+        if (length(toks)) pkgs <- c(pkgs, toks)
+      }
+    }
+
+    # import::from(pkg, ...) / import::here(pkg, ...) -> first argument is the pkg
+    im <- str_match_all(text,
+      "import::(?:from|here)\\s*\\(\\s*[\"']?([A-Za-z][A-Za-z0-9._]*)[\"']?")[[1]]
+    if (nrow(im) > 0) pkgs <- c(pkgs, im[, 2])
+
+    # groundhog.library("pkg", date) / groundhog.library(c("a","b"), date)
+    gh <- str_match_all(text,
+      "(?:groundhog::)?groundhog\\.library\\s*\\(\\s*(c\\s*\\([^)]*\\)|\"[^\"]*\"|'[^']*')")[[1]]
+    if (nrow(gh) > 0) {
+      for (arg in gh[, 2]) {
+        arg  <- str_remove(arg, "^\\s*c\\s*\\(")
+        toks <- str_match_all(arg, "[\"']([A-Za-z][A-Za-z0-9._]*)[\"']")[[1]]
+        if (nrow(toks) > 0) pkgs <- c(pkgs, toks[, 2])
+      }
+    }
+  }
   pkgs <- sort(unique(pkgs[!is.na(pkgs) & nzchar(pkgs)]))
 
+  # Drop base-priority packages (base, stats, utils, methods, ...) which ship
+  # with R and are picked up by the new pkg:: scan; keep recommended packages.
+  if (length(pkgs)) {
+    is_base <- vapply(pkgs, function(p)
+      identical(unname(tryCatch(
+        utils::packageDescription(p, fields = "Priority"),
+        error = function(e) NA_character_)), "base"),
+      logical(1))
+    pkgs <- pkgs[!is_base]
+  }
+
+  # ---- renv.lock (authoritative versions if present) ----
+  lock_file <- {
+    top <- file.path(folder, "renv.lock")
+    if (file.exists(top)) top
+    else {
+      hits <- list.files(folder, pattern = "^renv\\.lock$",
+                         recursive = TRUE, full.names = TRUE)
+      if (length(hits)) hits[1] else NA_character_
+    }
+  }
+  lock_versions  <- character(0)
+  lock_r_version <- NA_character_
+  if (!is.na(lock_file) && requireNamespace("jsonlite", quietly = TRUE)) {
+    lock <- tryCatch(jsonlite::fromJSON(lock_file, simplifyVector = FALSE),
+                     error = function(e) NULL)
+    if (!is.null(lock)) {
+      if (!is.null(lock$R$Version)) lock_r_version <- as.character(lock$R$Version)
+      pk <- lock$Packages
+      if (length(pk)) {
+        vers <- vapply(pk, function(x) if (is.null(x$Version)) NA_character_ else as.character(x$Version), character(1))
+        nms  <- vapply(pk, function(x) if (is.null(x$Package)) ""            else as.character(x$Package), character(1))
+        keep <- nzchar(nms)
+        lock_versions <- stats::setNames(vers[keep], nms[keep])
+      }
+    }
+  }
+
+  # ---- resolve a version for each detected package ----
+  resolve <- function(p) {
+    if (p %in% names(lock_versions) && !is.na(lock_versions[[p]])) return(lock_versions[[p]])
+    tryCatch(as.character(packageVersion(p)), error = function(e) "not installed")
+  }
+  version     <- if (length(pkgs)) vapply(pkgs, resolve, character(1)) else character(0)
+  n_from_lock <- sum(pkgs %in% names(lock_versions))
+
   list(
-    pkgs = if (!length(pkgs)) {
-      tibble(Package = character(), Version = character())
-    } else {
-      tibble(Package = pkgs,
-             Version = map_chr(pkgs, ~ tryCatch(
-               as.character(packageVersion(.x)), error = function(e) "not installed")))
-    },
+    pkgs = if (!length(pkgs)) tibble(Package = character(), Version = character())
+           else tibble(Package = pkgs, Version = unname(version)),
     n_files = length(r_files), n_total = length(all_files),
-    folder = folder, filenames = basename(r_files)
+    folder = folder, filenames = basename(r_files),
+    lock_file = lock_file, lock_r_version = lock_r_version, n_from_lock = n_from_lock
   )
 }
 

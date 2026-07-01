@@ -201,9 +201,12 @@ ui <- page_fluid(
         card(
           card_header(icon("box"), " Detected R packages"),
           card_body(
-            p("Scans all ", code(".R"), " / ", code(".Rmd"), " / ", code(".qmd"),
-              " files for ", code("library()"), " and ", code("require()"),
-              " calls, then resolves installed versions."),
+            p("Scans ", code(".R"), " / ", code(".Rmd"), " / ", code(".qmd"), " / ",
+              code(".Rnw"), " files for ", code("library()"), ", ", code("require()"), ", ",
+              code("pacman::p_load()"), ", ", code("librarian::shelf()"), ", ",
+              code("import::from()"), ", ", code("groundhog.library()"), ", and ",
+              code("pkg::"), " calls, then resolves each version. If an ",
+              code("renv.lock"), " is present, its recorded versions are used."),
             actionButton("scan_pkgs", "Scan for packages",
                          class = "btn-primary", icon = icon("magnifying-glass")),
             uiOutput("pkg_ui")

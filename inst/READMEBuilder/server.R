@@ -15,7 +15,7 @@ server <- function(input, output, session) {
     script_order = integer(0),
     pkgs         = NULL,
     pkg_diag     = NULL,
-    r_version    = NULL,          # imported R version (NULL -> use live R.version)
+    r_version    = NULL,          # imported / lockfile R version (NULL -> live R.version)
     import_msg   = NULL,
     # imported defaults for the dynamic per-file / per-script inputs (keyed by path)
     imp_desc       = list(),
@@ -163,7 +163,7 @@ server <- function(input, output, session) {
     rv$script_idx   <- which(is_script(files))
     rv$script_order <- rv$script_idx
     rv$root_name    <- basename(rv$folder)
-    rv$r_version    <- NULL                  # use live R.version for a fresh folder
+    rv$r_version    <- NULL                  # use live R.version until a scan finds a lockfile
 
     # A fresh folder supersedes any imported defaults / packages.
     rv$pkgs <- NULL; rv$pkg_diag <- NULL; rv$import_msg <- NULL
@@ -332,19 +332,34 @@ server <- function(input, output, session) {
     req(rv$folder)
     result <- tryCatch(extract_packages(rv$folder),
       error = function(e) { showNotification(paste("Error:", e$message), type = "error"); NULL })
-    if (!is.null(result)) { rv$pkgs <- result$pkgs; rv$pkg_diag <- result }
+    if (!is.null(result)) {
+      rv$pkgs     <- result$pkgs
+      rv$pkg_diag <- result
+      # If an renv.lock recorded an R version, adopt it for the export.
+      if (!is.na(result$lock_r_version)) rv$r_version <- result$lock_r_version
+    }
   })
 
   output$pkg_ui <- renderUI({
     req(rv$pkg_diag)
     d <- rv$pkg_diag
+    lock_line <- {
+      lf <- d$lock_file
+      if (is.null(lf)) NULL                        # imported diagnostic, no lock field
+      else if (is.na(lf))
+        tagList(br(), tags$b("renv.lock: "), "not found; using installed versions")
+      else
+        tagList(br(), tags$b("renv.lock: "), code(basename(lf)),
+                sprintf(" (%d of %d versions from lockfile)", d$n_from_lock, nrow(rv$pkgs)))
+    }
     diag_box <- div(class = "alert alert-secondary mt-3 small",
       tags$b("Diagnostic info"), br(),
       tags$b("Source: "), code(d$folder), br(),
       tags$b("Total files: "), d$n_total, br(),
       tags$b("R/Rmd/qmd files: "), d$n_files,
       if (d$n_files > 0)
-        tagList(br(), tags$b("Files: "), paste(d$filenames, collapse = ", "))
+        tagList(br(), tags$b("Files: "), paste(d$filenames, collapse = ", ")),
+      lock_line
     )
     if (is.null(rv$pkgs) || nrow(rv$pkgs) == 0)
       return(tagList(diag_box,
