@@ -2,9 +2,12 @@
 
 server <- function(input, output, session) {
 
-  volumes <- c(Home = fs::path_home(), Root = "/")
-  shinyDirChoose(input, "folder_btn", roots = volumes, session = session,
-                 restrictions = system.file(package = "base"))
+  # OS-appropriate roots for the folder picker: drive letters (C:, D:, ...) on
+  # Windows, "/" on macOS/Linux. getVolumes() returns a FUNCTION, hence the ().
+  volumes <- c(Home = fs::path_home(),
+               "R Installation" = R.home(),
+               shinyFiles::getVolumes()())
+  shinyDirChoose(input, "folder_btn", roots = volumes, session = session)
 
   rv <- reactiveValues(
     folder       = NULL,
@@ -448,6 +451,8 @@ server <- function(input, output, session) {
   output$preview    <- renderText({ readme_text() })
   output$export_btn <- downloadHandler(
     filename = function() "README.md",
-    content  = function(f) writeLines(readme_text(), f)
+    # Force UTF-8 bytes so the directory-map box characters, "×", and accented
+    # text export correctly regardless of the user's locale (matters on Windows).
+    content  = function(f) writeLines(enc2utf8(readme_text()), f, useBytes = TRUE)
   )
 }
