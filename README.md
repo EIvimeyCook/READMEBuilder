@@ -66,10 +66,12 @@ shown in the left-hand navigation:
    and a unit for each column, plus the date(s) and location of data collection.
 3. **Script Order:** reorder your code with the up/down arrows to record the
    sequence it should be run in, and add a short description of what each script
-   does.
+   does.  
 4. **R Packages:** scans every R script (`.R`, `.Rmd`, `.qmd`, `.Rnw`) for
-   `library()` / `require()` calls and resolves the installed version of each
-   package.
+   `library()`, `require()`, `requireNamespace()`, `pacman::p_load()`, and
+   `pkg::fun` calls, then resolves each package's version. If the folder contains
+   an `renv.lock`, the versions (and R version) recorded there are used in
+   preference to what is installed.  
 5. **Preview & Export:** a live Markdown preview, with one-click download of
    `README.md`.
 
