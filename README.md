@@ -178,7 +178,9 @@ external calls, swap the theme to a system font.
 READMEBuilder depends on the following R packages, installed automatically with
 the command above:
 
-`shiny`, `bslib`, `tidyverse`, `readxl`, `stringr`, `purrr`, `shinyFiles`, `fs`.
+`shiny`, `bslib`, `tidyverse`, `readxl`, `stringr`, `purrr`, `shinyFiles`, `fs`,
+and `jsonlite` (used to read `renv.lock`; the lockfile step is skipped if it is
+not installed).
 
 ## Tips and limitations
 
