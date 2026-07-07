@@ -203,7 +203,7 @@ If READMEBuilder helps with your work, please cite it (adjust the year as
 needed):
 
 > Ivimey-Cook, E. R. (2026). *READMEBuilder: Build high-quality READMEs for
-> reproducible research datasets and code.* R package.
+> reproducible research* R package.
 > <https://github.com/EIvimeyCook/READMEBuilder>
 
 ## License
