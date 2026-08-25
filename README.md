@@ -1,3 +1,11 @@
+<p align="center">
+  <img src="https://github.com/EIvimeyCook/READMEBuilder/blob/main/man/figures/logo.png" width = "200"/>
+</p>
+
+<div align="center">
+ <h1>sREADMEBuilder</h1>
+</div>
+
 # READMEBuilder <img src="man/figures/logo.png" align="right" height="120" alt="" />
 
 <!-- badges: start -->
