@@ -3,7 +3,7 @@
 </p>
 
 <div align="center">
- <h1>sREADMEBuilder</h1>
+ <h1>READMEBuilder</h1>
 </div>
 
 <!-- badges: start -->
