@@ -13,23 +13,11 @@ library(fs)
 
 # ── Logo ──────────────────────────────────────────────────────────────────────
 
-logo_svg <- HTML('
-<svg height="44" viewBox="0 0 190 44" xmlns="http://www.w3.org/2000/svg">
-  <rect x="0" y="2" width="40" height="40" rx="8" fill="rgba(255,255,255,0.12)"/>
-  <rect x="7"  y="18" width="26" height="4" rx="2" fill="#4dd0e1"/>
-  <rect x="7"  y="26" width="26" height="4" rx="2" fill="#4dd0e1"/>
-  <rect x="13" y="12" width="4"  height="20" rx="2" fill="white"/>
-  <rect x="23" y="12" width="4"  height="20" rx="2" fill="white"/>
-  <ellipse cx="30" cy="10" rx="8" ry="5" fill="#f5a623"/>
-  <ellipse cx="30" cy="12" rx="10" ry="3" fill="#f5a623"/>
-  <rect x="22" y="13" width="16" height="3" rx="1.5" fill="#e08800"/>
-  <rect x="29" y="9"  width="3"  height="5" rx="1"   fill="#fff8e1"/>
-  <text x="50" y="21" font-family="system-ui,sans-serif" font-size="13"
-        font-weight="700" fill="white" letter-spacing="0.5">README</text>
-  <text x="50" y="37" font-family="system-ui,sans-serif" font-size="13"
-        font-weight="700" fill="#4dd0e1" letter-spacing="0.5">Builder</text>
-</svg>
-')
+logo_svg <- tags$img(
+  src   = "readme_logo.png",
+  alt   = "READMEBuilder",
+  style = "display:block; height:64px; max-width:100%; margin:0 auto;"
+)
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
