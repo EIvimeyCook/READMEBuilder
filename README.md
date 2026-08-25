@@ -1,4 +1,4 @@
-# READMEBuilder
+# READMEBuilder <img src="man/figures/logo.png" align="right" height="120" alt="" />
 
 <!-- badges: start -->
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE.md)
