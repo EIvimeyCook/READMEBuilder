@@ -14,7 +14,7 @@ library(fs)
 # ── Logo ──────────────────────────────────────────────────────────────────────
 
 logo_svg <- tags$img(
-  src   = "readme_logo.png",
+  src   = "logo.png",
   alt   = "READMEBuilder",
   style = "display:block; height:64px; max-width:100%; margin:0 auto;"
 )
