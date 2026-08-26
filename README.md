@@ -212,6 +212,9 @@ needed):
 > reproducible research* R package.
 > <https://github.com/EIvimeyCook/READMEBuilder>
 
+A machine-readable [`CITATION.cff`](CITATION.cff) is included, so GitHub's
+"Cite this repository" button gives formatted APA and BibTeX.
+
 ## License
 
 Released under the [MIT License](LICENSE.md).
