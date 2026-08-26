@@ -21,7 +21,7 @@ R) versions produced the results. READMEBuilder captures all of this for you. It
 summarises every data file, records the script run order, detects your
 dependencies and their installed versions, maps the project's directory
 structure, and assembles everything into a tidy Markdown file ready to archive or
-share (for example on Zenodo, the OSF, Dryad, or GitHub).
+share (for example on Zenodo, Dryad, or GitHub).
 
 ## Features
 
