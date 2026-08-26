@@ -5,7 +5,7 @@ Authors@R:
     person("Ed", "Ivimey-Cook",
            email = "e.ivimeycook@gmail.com",
            role  = c("aut", "cre"),
-           comment = c(ORCID = "0000-0002-1974-1370"))
+           comment = c(ORCID = "0000-0003-4910-0443"))
 Description: A Shiny application that walks researchers through building a
     high-quality README file for research datasets and code. Automatically
     describes tabular data columns (ranges, levels, NAs), detects R package
