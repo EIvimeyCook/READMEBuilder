@@ -37,6 +37,11 @@ share (for example on Zenodo, Dryad, or GitHub).
   installed version of every package, plus the R version.
 - **Directory map.** An ASCII tree of your project, embedded in the README.
 - **Separate code and data licences.** Pick from a list or type your own.
+- **Model location and specification (MLast).** Optionally record each analysis
+  and link it to the data, with *separate* fields for where the method is
+  described, where the results are reported, and where the code lives.
+- **Dependency libraries are skipped.** Restored `renv`/`packrat` libraries are
+  excluded from scanning, so loading a project folder stays fast.
 - **Re-open and edit.** Import a README the app made earlier and continue where
   you left off, without the original data folder.
 - **Runs entirely on your machine.** Files are read locally and never uploaded.
@@ -57,7 +62,7 @@ library(READMEBuilder)
 build_readme()
 ```
 
-This opens the Shiny app in your browser. The app is organised into five steps,
+This opens the Shiny app in your browser. The app is organised into six steps,
 shown in the left-hand navigation:
 
 1. **Project Info:** title, description, abstract, instructions, DOI(s),
@@ -78,7 +83,10 @@ shown in the left-hand navigation:
    `pkg::fun` calls, then resolves each package's version. If the folder contains
    an `renv.lock`, the versions (and R version) recorded there are used in
    preference to what is installed.  
-5. **Preview & Export:** a live Markdown preview, with one-click download of
+5. **Models (optional):** record each analysis and where it lives — see
+   [Recording models (MLast)](#recording-models-mlast). Leave this tab empty and
+   no Models section is added.
+6. **Preview & Export:** a live Markdown preview, with one-click download of
    `README.md`.
 
 ## What gets auto-detected
@@ -152,14 +160,82 @@ Scripts should be run in the following order:
 | `ggplot2` | 3.5.1 |
 ```
 
+If you fill in the optional **Models** tab, a models table is included too:
+
+```text
+## Models
+
+| Outcome (paper) | Outcome (data) | Predictors (data) | Test | Methods location | Results location | Code location | Notes |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| Proportion scrounging | PropPS | Opponent_propPS_average | Linear Regression | Methods, p.4 | Table 2, p.7 | sem.R:3 | Type III SS |
+```
+
+## Recording models (MLast)
+
+The **Models** tab is entirely optional — leave it empty and nothing is added to
+your README. It is, however, one of the most useful things you can fill in. It
+records a *Model Location and Specification Table* (MLast): for each analysis,
+what was modelled, which data columns it used, and where to find it. That is
+precisely the link that tends to be missing when someone tries to reproduce a
+published result from shared data.
+
+The idea is adapted from the Model Location and Specification Table proposed by
+Jones et al. ([2026](https://doi.org/10.64898/2026.04.07.26350286)), *Challenges
+in the Computational Reproducibility of Linear Regression Analyses*, with one
+deliberate change.
+
+**"location" is split into three separate fields.** The original proposal
+has a single `Location` column, which leaves it ambiguous whether you should cite
+where a method is *described* or where its results are *reported*. Here they are
+distinct, and a third field records the code:
+
+| Field | What it records | Example |
+| :---- | :-------------- | :------ |
+| Outcome (paper) | Outcome as named in the manuscript | `Proportion scrounging` |
+| Outcome (data) | Matching column name in the data | `PropPS` |
+| Predictors (data) | Predictor column names | `Opponent_propPS_average` |
+| Test | Model or test type | `Linear Regression` |
+| Methods location | Where the analysis is **described** | `Methods, p.4, para 2` |
+| Results location | Where the output is **reported** | `Table 2, p.7` |
+| Code location | Script and line | `sem.R:3` |
+| Notes | Anything else | `Type III SS` |
+
+Rather than typing line numbers by hand (they go stale as soon as a script is
+edited), **Suggest from loaded scripts** searches the scripts in your loaded
+project folder for the outcome or first predictor and offers each match as a
+`script:line` option with a preview of the line. Load a project folder on the
+**Files** tab first.
+
+The result is written to the README as a `## Models` table, and is restored when
+you re-import that README later.
+
+## Dependency folders are skipped
+
+If you have run `renv::restore()`, your project folder contains a full local copy
+of every dependency's source under `renv/library` — often tens of thousands of
+files. Scanning those is slow, treats every package's internal `.R` files as if
+they were your own scripts, and pollutes the detected dependency list.
+
+READMEBuilder therefore skips the following when loading a folder, scanning for
+packages, and searching for code locations:
+
+```text
+renv/library    renv/staging   renv/local    renv/cellar   renv/sandbox
+packrat/lib     packrat/src    .Rproj.user   .git          .Rcheck
+node_modules    __pycache__    .venv         venv          .quarto
+```
+
+`renv.lock` itself lives at the project root and is **not** affected, so package
+and R versions are still read from it exactly as before.
+
 ## Editing an existing README
 
 On the **Project Info** tab, upload a `README.md` previously produced by
 READMEBuilder and click **Import / Re-import**. The app parses the file and
 repopulates the whole form (project info, the file list and directory map,
-per-column descriptions and units, the script run order and descriptions, and
-the R / package versions) so you can edit and re-export *without* needing the
-original data folder. **Clear** resets everything to a blank README.
+per-column descriptions and units, the script run order and descriptions, any
+recorded models, and the R / package versions) so you can edit and re-export
+*without* needing the original data folder. **Clear** resets everything to a blank README.
 
 The importer is deliberately tolerant of older or hand-edited files (for example
 a `## Funders` or `## Funding` heading, and single- or split-licence wording).
@@ -197,6 +273,8 @@ not installed).
   column is generated automatically.
 - Importing reloads metadata and structure but not the data itself. Re-load the
   folder if you want summaries recomputed from current files.
+- The **Models** tab is filled in by you. Only the code location can be
+  suggested automatically, and only for scripts in the loaded folder.
 
 ## Bug reports and contributions
 
