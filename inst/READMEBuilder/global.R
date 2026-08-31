@@ -26,6 +26,31 @@ logo_svg <- tags$img(
 is_script  <- function(f) str_detect(f, "\\.(R|r|Rmd|rmd|Rnw|rnw|qmd)$")
 is_tabular <- function(f) str_detect(f, "\\.(csv|tsv|txt|xlsx|xls)$")
 
+# ── Excluded machinery folders ────────────────────────────────────────────────
+# Project folders that hold *installed dependencies* or IDE/VCS state rather
+# than the researcher's own data and code. A restored renv/packrat library is a
+# full copy of every dependency's source tree — often tens of thousands of files
+# — so walking it makes the app appear to hang, misclassifies every package's
+# internal .R files as the user's own scripts, and pollutes the detected package
+# list with dependencies-of-dependencies.
+#
+# NOTE: renv.lock itself lives at the project root, NOT inside renv/library, so
+# it is untouched by this filter and is still found and used for versions.
+
+exclude_dirs <- c("renv/library", "renv/staging", "renv/local", "renv/cellar",
+                  "renv/sandbox", "packrat/lib", "packrat/src",
+                  ".Rproj.user", ".git", ".Rcheck", "node_modules",
+                  "__pycache__", ".venv", "venv", ".quarto")
+
+# TRUE for any relative path sitting inside one of the folders above (at any
+# depth), so those files can be dropped from every recursive scan.
+is_excluded <- function(paths) {
+  if (!length(paths)) return(logical(0))
+  pat <- paste0("(^|/)(", paste(str_replace_all(exclude_dirs, fixed("."), "\\."),
+                                 collapse = "|"), ")(/|$)")
+  str_detect(paths, pat)
+}
+
 # Shared licence choices, offered in both the code and data licence selectors.
 # The selectors allow free-typed values too, so an imported licence that is not
 # in this list (e.g. "CC-BY-4.0") can still be set.
@@ -46,6 +71,60 @@ license_choices <- c(
   "Etalab Open Licence 2.0 (France)",
   "Unlicense", "WTFPL", "All rights reserved"
 )
+
+# ── MLast (Model Location and Specification table) ───────────────────────────
+# Optional, per-project table recording, for each analysis: its outcome and
+# predictors (mapped to the actual data column names), and — kept as three
+# DISTINCT fields rather than one ambiguous "location" column — where the
+# analysis is described (methods), where its output is reported (results),
+# and where the code that produced it lives. This resolves an ambiguity in
+# the original MLast proposal (Jones et al. 2026, medRxiv
+# doi:10.64898/2026.04.07.26350286, Table 5), whose single "Location" column
+# does not distinguish a methods citation from a results citation.
+
+mlast_cols <- c("Outcome (paper)", "Outcome (data)", "Predictors (data)",
+                "Test", "Methods location", "Results location",
+                "Code location", "Notes")
+
+mlast_template <- function() {
+  tibble(
+    outcome_paper = character(), outcome_data = character(),
+    predictors    = character(), test_type    = character(),
+    methods_loc   = character(), results_loc  = character(),
+    code_loc      = character(), notes        = character()
+  )
+}
+
+# ── find_code_locations() ─────────────────────────────────────────────────────
+# Searches script files (.R/.Rmd/.qmd/.Rnw) under `folder` for a literal,
+# case-insensitive substring and returns every matching line as a
+# script:line pair with a snippet, so a model's code location can be found
+# rather than typed from memory (which drifts as soon as a script is edited).
+# Returns a 0-row tibble if `folder`/`pattern` are blank or nothing matches.
+
+find_code_locations <- function(folder, pattern) {
+  pattern <- str_trim(pattern %||% "")
+  empty   <- tibble(script = character(), line = integer(), snippet = character())
+  if (!nzchar(pattern) || is.null(folder) || !nzchar(folder) || !dir.exists(folder))
+    return(empty)
+
+  files <- list.files(folder, pattern = "\\.(R|r|Rmd|rmd|Rnw|rnw|qmd)$",
+                       recursive = TRUE, full.names = TRUE, all.files = TRUE)
+  # Only search the researcher's own scripts, not installed dependencies.
+  rel   <- str_remove(files, fixed(paste0(folder, .Platform$file.sep)))
+  files <- files[!is_excluded(rel)]
+  if (!length(files)) return(empty)
+
+  hits <- map_dfr(files, function(f) {
+    ls <- tryCatch(readLines(f, warn = FALSE), error = function(e) character(0))
+    if (!length(ls)) return(NULL)
+    idx <- which(str_detect(ls, fixed(pattern, ignore_case = TRUE)))
+    if (!length(idx)) return(NULL)
+    tibble(script = basename(f), line = idx, snippet = str_trim(ls[idx]))
+  })
+
+  if (is.null(hits) || nrow(hits) == 0) empty else hits
+}
 
 # ── build_dir_tree() ──────────────────────────────────────────────────────────
 # Builds a `tree`-style ASCII directory map from a vector of relative file paths.
@@ -211,6 +290,14 @@ extract_packages <- function(folder) {
   r_files   <- list.files(folder, pattern = "\\.(R|r|Rmd|rmd|Rnw|rnw|qmd)$",
                            recursive = TRUE, full.names = TRUE, all.files = TRUE)
   all_files <- list.files(folder, recursive = TRUE, full.names = FALSE)
+
+  # Drop anything inside an installed package library / IDE state folder: those
+  # are dependencies, not this project's code. Compared on the path RELATIVE to
+  # the project root so a user whose project happens to live under e.g.
+  # ~/.git-backups/ is not wrongly filtered.
+  rel_r    <- str_remove(r_files, fixed(paste0(folder, .Platform$file.sep)))
+  r_files  <- r_files[!is_excluded(rel_r)]
+  all_files <- all_files[!is_excluded(all_files)]
 
   # ---- collect package names from source ----
   pkgs <- character(0)
@@ -504,6 +591,22 @@ parse_readme <- function(text) {
     if (length(bl)) file_desc[[it$path]] <- paste(bl, collapse = "\n")
   }
 
+  # ── Models (MLast) ───────────────────────────────────────────────────────────
+  models_body <- sec_body("Models")
+  model_rows  <- models_body[str_detect(models_body, "^\\s*\\|")]
+  model_rows  <- model_rows[!str_detect(model_rows, "^\\s*\\|\\s*:?-{2,}")]
+  model_rows  <- model_rows[!str_detect(model_rows, "Outcome \\(paper\\)")]
+  models <- mlast_template()
+  for (r in model_rows) {
+    cells <- split_row(r)
+    if (length(cells) < 8) next
+    models <- bind_rows(models, tibble(
+      outcome_paper = cells[1], outcome_data = cells[2], predictors = cells[3],
+      test_type = cells[4], methods_loc = cells[5], results_loc = cells[6],
+      code_loc = cells[7], notes = cells[8]
+    ))
+  }
+
   # ── Code / scripts (run order + descriptions) ───────────────────────────────
   script_paths <- character(0); script_desc <- list(); cur <- NULL
   for (l in sec_body("Code")) {
@@ -537,7 +640,7 @@ parse_readme <- function(text) {
     script_order = script_order, script_desc = script_desc,
     pkgs = pkgs, r_version = r_version,
     file_desc = file_desc, col_desc = col_desc, units = units,
-    dates = dates, locs = locs
+    dates = dates, locs = locs, models = models
   )
 }
 
@@ -547,7 +650,7 @@ parse_readme <- function(text) {
 assemble_readme <- function(meta, files, descriptions, auto, pkgs,
                             script_order, script_descs, units_list,
                             col_descs, file_extras, root = "project",
-                            r_version = NULL) {
+                            r_version = NULL, models = NULL) {
   md   <- character(0)
   push <- function(...) md <<- c(md, c(...), "")
 
@@ -664,6 +767,30 @@ assemble_readme <- function(meta, files, descriptions, auto, pkgs,
       if (nzchar(desc %||% "")) md <- c(md, "", desc)
       md <- c(md, "")
     }
+  }
+
+  # Models (optional MLast-style table — location and specification of each
+  # analysis). Omitted entirely when no rows have been recorded.
+  if (!is.null(models) && nrow(models) > 0) {
+    push("## Models",
+         paste0(
+           "Location and specification of each analysis, linking the outcome ",
+           "and predictors to the underlying data, and (kept separately) where ",
+           "the analysis is described, where its results are reported, and ",
+           "where the code that produced it lives. **Methods location** = ",
+           "where the analysis is described; **Results location** = where the ",
+           "output is reported; **Code location** = script and line."))
+    md <- c(md,
+            paste0("| ", paste(mlast_cols, collapse = " | "), " |"),
+            paste0("| ", paste(rep(":---", length(mlast_cols)), collapse = " | "), " |"))
+    for (i in seq_len(nrow(models))) {
+      r <- models[i, ]
+      md <- c(md, sprintf("| %s | %s | %s | %s | %s | %s | %s | %s |",
+        esc_cell(r$outcome_paper), esc_cell(r$outcome_data), esc_cell(r$predictors),
+        esc_cell(r$test_type), esc_cell(r$methods_loc), esc_cell(r$results_loc),
+        esc_cell(r$code_loc), esc_cell(r$notes)))
+    }
+    md <- c(md, "")
   }
 
   # Scripts

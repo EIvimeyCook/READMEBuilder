@@ -19,6 +19,7 @@ server <- function(input, output, session) {
     pkgs         = NULL,
     pkg_diag     = NULL,
     r_version    = NULL,          # imported / lockfile R version (NULL -> live R.version)
+    models       = mlast_template(),  # optional MLast-style model location table
     import_msg   = NULL,
     # imported defaults for the dynamic per-file / per-script inputs (keyed by path)
     imp_desc       = list(),
@@ -97,6 +98,7 @@ server <- function(input, output, session) {
     rv$imp_date       <- p$dates
     rv$imp_loc        <- p$locs
     rv$imp_scriptdesc <- p$script_desc
+    rv$models         <- if (!is.null(p$models) && nrow(p$models) > 0) p$models else mlast_template()
 
     if (!is.null(p$pkgs) && nrow(p$pkgs) > 0) {
       rv$pkgs     <- p$pkgs
@@ -138,6 +140,7 @@ server <- function(input, output, session) {
     rv$root_name <- NULL; rv$folder <- NULL; rv$import_msg <- NULL
     rv$imp_desc <- list(); rv$imp_coldesc <- list(); rv$imp_units <- list()
     rv$imp_date <- list(); rv$imp_loc <- list(); rv$imp_scriptdesc <- list()
+    rv$models <- mlast_template()
     showNotification("Cleared. Form reset to a blank README.", type = "message")
   })
 
@@ -157,6 +160,10 @@ server <- function(input, output, session) {
 
     files <- list.files(rv$folder, recursive = TRUE, all.files = FALSE, no.. = TRUE)
     files <- files[!str_detect(files, "^\\.|/\\.")]
+    # Skip installed dependency libraries (renv/packrat) and IDE/VCS state:
+    # these are not the researcher's own data or code, and a restored renv
+    # library can hold tens of thousands of files.
+    files <- files[!is_excluded(files)]
     if (!length(files)) {
       showNotification("No files found in that folder.", type = "warning"); return()
     }
@@ -377,6 +384,107 @@ server <- function(input, output, session) {
     req(rv$pkgs, nrow(rv$pkgs) > 0); rv$pkgs
   }, striped = TRUE, hover = TRUE)
 
+  # ── Models (optional MLast-style table) ──────────────────────────────────────
+
+  observeEvent(input$add_model, {
+    req(nzchar(str_trim(input$model_outcome_data  %||% "")) ||
+        nzchar(str_trim(input$model_outcome_paper %||% "")))
+    rv$models <- bind_rows(rv$models, tibble(
+      outcome_paper = input$model_outcome_paper %||% "",
+      outcome_data  = input$model_outcome_data  %||% "",
+      predictors    = input$model_predictors    %||% "",
+      test_type     = input$model_test_type     %||% "",
+      methods_loc   = input$model_methods_loc   %||% "",
+      results_loc   = input$model_results_loc   %||% "",
+      code_loc      = input$model_code_loc      %||% "",
+      notes         = input$model_notes         %||% ""
+    ))
+    updateTextInput(session,     "model_outcome_paper", value = "")
+    updateTextInput(session,     "model_outcome_data",  value = "")
+    updateTextInput(session,     "model_predictors",    value = "")
+    updateTextInput(session,     "model_methods_loc",   value = "")
+    updateTextInput(session,     "model_results_loc",   value = "")
+    updateTextInput(session,     "model_code_loc",      value = "")
+    updateTextAreaInput(session, "model_notes",         value = "")
+  })
+
+  observeEvent(input$clear_models, { rv$models <- mlast_template() })
+
+  observeEvent(input$model_delete, {
+    i <- input$model_delete
+    if (i >= 1 && i <= nrow(rv$models)) rv$models <- rv$models[-i, ]
+  })
+
+  # "Suggest from loaded scripts": searches the loaded project folder for the
+  # outcome data-column name (falling back to the first predictor) and lets
+  # the user pick a matching script:line rather than typing it from memory.
+  observeEvent(input$model_suggest_code, {
+    if (is.null(rv$folder) || !nzchar(rv$folder)) {
+      showNotification("Load a project folder on the Files tab first.", type = "warning")
+      return()
+    }
+    pat <- str_trim(input$model_outcome_data %||% "")
+    if (!nzchar(pat))
+      pat <- str_trim((str_split(input$model_predictors %||% "", ",")[[1]])[1] %||% "")
+    if (!nzchar(pat)) {
+      showNotification("Enter an outcome or predictor to search for first.", type = "warning")
+      return()
+    }
+    hits <- find_code_locations(rv$folder, pat)
+    if (nrow(hits) == 0) {
+      showNotification(
+        paste0("No matches for \"", pat, "\" in the loaded scripts. Enter the code location manually."),
+        type = "warning")
+      return()
+    }
+    showModal(modalDialog(
+      title = paste0("Matches for \"", pat, "\""), size = "l", easyClose = TRUE,
+      radioButtons("model_code_pick", NULL,
+        choiceNames = map(seq_len(nrow(hits)), function(i)
+          tagList(tags$code(paste0(hits$script[i], ":", hits$line[i])), " — ",
+                  tags$small(class = "text-muted", hits$snippet[i]))),
+        choiceValues = paste0(hits$script, ":", hits$line)),
+      footer = tagList(
+        modalButton("Cancel"),
+        actionButton("model_code_pick_use", "Use selected", class = "btn-primary")
+      )
+    ))
+  })
+
+  observeEvent(input$model_code_pick_use, {
+    req(input$model_code_pick)
+    updateTextInput(session, "model_code_loc", value = input$model_code_pick)
+    removeModal()
+  })
+
+  output$models_table_ui <- renderUI({
+    if (is.null(rv$models) || nrow(rv$models) == 0)
+      return(p(class = "text-muted",
+               "No models recorded yet — this tab is optional. Add one above, ",
+               "or leave it empty and the README will have no Models section."))
+
+    header <- tags$tr(
+      tags$th("#"), tags$th("Outcome (paper)"), tags$th("Outcome (data)"),
+      tags$th("Predictors"), tags$th("Test"), tags$th("Methods loc."),
+      tags$th("Results loc."), tags$th("Code loc."), tags$th("Notes"), tags$th()
+    )
+    rows <- map(seq_len(nrow(rv$models)), function(i) {
+      r <- rv$models[i, ]
+      tags$tr(
+        tags$td(i), tags$td(r$outcome_paper), tags$td(tags$code(r$outcome_data)),
+        tags$td(r$predictors), tags$td(r$test_type), tags$td(r$methods_loc),
+        tags$td(r$results_loc), tags$td(tags$code(r$code_loc)), tags$td(r$notes),
+        tags$td(tags$button(
+          class = "btn btn-sm btn-outline-danger",
+          onclick = sprintf("Shiny.setInputValue('model_delete',%d,{priority:'event'})", i),
+          icon("trash")))
+      )
+    })
+    tags$table(class = "table table-sm table-bordered small mb-0",
+      tags$thead(class = "table-light", header), tags$tbody(rows))
+  })
+  outputOptions(output, "models_table_ui", suspendWhenHidden = FALSE)
+
   # ── Collect inputs ────────────────────────────────────────────────────────────
   get_meta <- reactive({
     list(title = input$title, description = input$description,
@@ -444,7 +552,8 @@ server <- function(input, output, session) {
       col_descs    = get_col_descs(),
       file_extras  = get_file_extras(),
       root         = tree_root(),
-      r_version    = rv$r_version
+      r_version    = rv$r_version,
+      models       = rv$models
     )
   })
 

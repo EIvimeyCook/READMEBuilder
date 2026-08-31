@@ -87,6 +87,7 @@ ui <- page_fluid(
         nav_panel(tagList(icon("folder-open"), " Files"),          value = "tab_files",    NULL),
         nav_panel(tagList(icon("list-ol"),     " Script Order"),   value = "tab_scripts",  NULL),
         nav_panel(tagList(icon("box"),         " R Packages"),     value = "tab_packages", NULL),
+        nav_panel(tagList(icon("diagram-project"), " Models"),     value = "tab_models",   NULL),
         nav_panel(tagList(icon("eye"),         " Preview & Export"), value = "tab_preview", NULL)
       )
     ),
@@ -214,7 +215,75 @@ ui <- page_fluid(
         )
       ),
 
-      # 5 · Preview & Export ─────────────────────────────────────────────────────
+      # 5 · Models (optional MLast-style table) ──────────────────────────────────
+      conditionalPanel("input.main_nav === 'tab_models'",
+        card(class = "mb-3",
+          card_header(icon("diagram-project"), " Model location & specification (optional)"),
+          card_body(
+            div(class = "alert alert-info py-2 small mb-3",
+              tags$strong("Optional — but worth filling in."),
+              " Leave this tab empty and no Models section is added to the README.",
+              " Completing it, though, is one of the most useful things you can do",
+              " for reproducibility: it maps each analysis in your write-up to the",
+              " data columns it used and to the code that produced it, which is",
+              " exactly the link that is usually missing when someone tries to",
+              " reproduce a result.",
+              tags$br(), tags$br(),
+              "Inspired by the Model Location and Specification Table (MLast)",
+              " proposed in ",
+              tags$a(href = "https://doi.org/10.64898/2026.04.07.26350286",
+                     target = "_blank",
+                     "Jones et al. (2026), \"Challenges in the Computational ",
+                     "Reproducibility of Linear Regression Analyses\""),
+              ". Their table uses a single \"Location\" column; here that is split",
+              " into separate methods, results, and code locations, since those are",
+              " three different places and conflating them is ambiguous."),
+            p(class = "text-muted small",
+              "For each analysis, record the outcome and predictors (mapped to the ",
+              "actual data columns), and where it is described, where the results ",
+              "are reported, and where the code lives."),
+            div(class = "rb-two-col",
+              textInput("model_outcome_paper", "Outcome (as named in the paper)",
+                        placeholder = "e.g. Systolic Blood Pressure"),
+              textInput("model_outcome_data", "Outcome (data column name)",
+                        placeholder = "e.g. sbp")
+            ),
+            textInput("model_predictors", "Predictors (data column names, comma-separated)",
+                      placeholder = "e.g. age, sex, bmi_category"),
+            div(class = "rb-two-col",
+              selectizeInput("model_test_type", "Test / model type",
+                choices = c("Linear Regression", "Logistic Regression", "Correlation",
+                            "ANOVA", "Mixed Model", "Other"),
+                options = list(create = TRUE, placeholder = "Select or type…")),
+              textInput("model_methods_loc", "Methods location",
+                        placeholder = "e.g. Methods, p.4, para 2")
+            ),
+            div(class = "rb-two-col",
+              textInput("model_results_loc", "Results location",
+                        placeholder = "e.g. Table 2, p.7"),
+              div(
+                textInput("model_code_loc", "Code location (script:line)",
+                          placeholder = "e.g. analysis.R:42"),
+                actionButton("model_suggest_code", "Suggest from loaded scripts",
+                             class = "btn-outline-secondary btn-sm mb-2",
+                             icon = icon("magnifying-glass"))
+              )
+            ),
+            textAreaInput("model_notes", "Notes", rows = 2,
+                          placeholder = "e.g. Type III SS, reference category = Normal"),
+            actionButton("add_model", "Add model", class = "btn-primary",
+                         icon = icon("plus")),
+            actionButton("clear_models", "Clear all",
+                         class = "btn-outline-danger ms-1", icon = icon("trash"))
+          )
+        ),
+        card(
+          card_header(icon("table-list"), " Recorded models"),
+          card_body(uiOutput("models_table_ui"))
+        )
+      ),
+
+      # 6 · Preview & Export ─────────────────────────────────────────────────────
       conditionalPanel("input.main_nav === 'tab_preview'",
         card(
           card_header(
