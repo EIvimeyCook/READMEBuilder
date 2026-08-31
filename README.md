@@ -42,6 +42,8 @@ share (for example on Zenodo, Dryad, or GitHub).
   described, where the results are reported, and where the code lives.
 - **Dependency libraries are skipped.** Restored `renv`/`packrat` libraries are
   excluded from scanning, so loading a project folder stays fast.
+- **Built-in walkthrough.** A **How to use this app** button explains each tab;
+  it also opens automatically the first time you run the app.
 - **Re-open and edit.** Import a README the app made earlier and continue where
   you left off, without the original data folder.
 - **Runs entirely on your machine.** Files are read locally and never uploaded.
@@ -109,8 +111,7 @@ Each column in a tabular file gets an automatic summary:
 | Logical | counts of `TRUE`, `FALSE`, and `NA` |
 
 Files that look tabular by extension but do not parse cleanly (for example a
-prose `.txt`) are quietly skipped and offered as free-text instead, so a single
-odd file never stops the app.
+prose `.txt`) are quietly skipped and offered as free-text instead.
 
 ## What the output looks like
 
@@ -170,14 +171,29 @@ If you fill in the optional **Models** tab, a models table is included too:
 | Proportion scrounging | PropPS | Opponent_propPS_average | Linear Regression | Methods, p.4 | Table 2, p.7 | sem.R:3 | Type III SS |
 ```
 
+## Getting help inside the app
+
+The **How to use this app** button at the bottom of the left-hand navigation
+opens a short walkthrough of what each tab is for. It also opens by itself the
+first time you launch the app, and then not again — the fact that you have seen
+it is recorded in a small marker file under `tools::R_user_dir("READMEBuilder",
+"config")`. Delete that file to see the walkthrough again on next launch.
+
+### Adding a demo video
+
+The walkthrough can show a screencast at the top. None ships with the package,
+but you can add one: drop a file named `demo.mp4` (or `demo.webm`, or
+`demo.gif`) into `inst/READMEBuilder/www/` and it is picked up automatically
+next time the app starts. Video files play muted and looped; a GIF is shown as
+an image. With no such file present the dialog simply shows the written
+walkthrough, so nothing breaks if you never add one.
+
 ## Recording models (MLast)
 
 The **Models** tab is entirely optional — leave it empty and nothing is added to
 your README. It is, however, one of the most useful things you can fill in. It
 records a *Model Location and Specification Table* (MLast): for each analysis,
-what was modelled, which data columns it used, and where to find it. That is
-precisely the link that tends to be missing when someone tries to reproduce a
-published result from shared data.
+what was modelled, which data columns it used, and where to find it. 
 
 The idea is adapted from the Model Location and Specification Table proposed by
 Jones et al. ([2026](https://doi.org/10.64898/2026.04.07.26350286)), *Challenges
@@ -220,13 +236,17 @@ READMEBuilder therefore skips the following when loading a folder, scanning for
 packages, and searching for code locations:
 
 ```text
-renv/library    renv/staging   renv/local    renv/cellar   renv/sandbox
-packrat/lib     packrat/src    .Rproj.user   .git          .Rcheck
-node_modules    __pycache__    .venv         venv          .quarto
+renv    packrat    .Rproj.user    .git      .Rcheck
+venv    .venv      node_modules   .quarto   __pycache__
 ```
 
-`renv.lock` itself lives at the project root and is **not** affected, so package
-and R versions are still read from it exactly as before.
+The whole `renv/` directory is skipped, not just `renv/library`: `renv/activate.R`
+is a bootstrap script renv generates rather than anything you wrote, and its own
+`requireNamespace("renv")` call would otherwise add renv to your dependency list
+and put `activate.R` in your script run order.
+
+`renv.lock` is **not** affected — it sits at the project root rather than inside
+`renv/`, so package and R versions are still read from it exactly as before.
 
 ## Editing an existing README
 
