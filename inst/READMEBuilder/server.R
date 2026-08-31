@@ -151,6 +151,78 @@ server <- function(input, output, session) {
         " Edit anything below, then export from the ", strong("Preview & Export"), " tab.")
   })
 
+  # ââ Help / walkthrough ââââââââââââââââââââââââââââââââââââââââââââââ
+  # Shown on demand from the sidebar, and once automatically on a user's first
+  # session (tracked in a small file under the user's config dir, so it does not
+  # nag on every launch).
+
+  help_step <- function(n, title, ...) {
+    div(class = "rb-step",
+        tags$h6(paste0(n, ". "), title),
+        tags$p(class = "text-muted", ...))
+  }
+
+  help_modal <- function() {
+    modalDialog(
+      title = tagList(icon("circle-question"), " How to use READMEBuilder"),
+      size = "l", easyClose = TRUE,
+
+      # Demo video / screencast. Shown only if a demo file has been shipped with
+      # the package, so the app works fine without one.
+      if (!is.null(demo_media_tag())) tagList(demo_media_tag(), tags$hr()),
+
+      p(class = "text-muted small",
+        "READMEBuilder walks you through documenting a project — both the data ",
+        "and the code — and exports a single README.md. Work through the tabs on ",
+        "the left; nothing is uploaded anywhere, and you can stop and re-import ",
+        "a README later to carry on."),
+
+      help_step(1, "Project Info",
+        "Title, description, authors, licences, funding. If you already have a ",
+        "README this app made, upload it here and hit Import to carry on editing it."),
+      help_step(2, "Files",
+        "Browse to your project folder — the top level, not a subfolder. Every ",
+        "subfolder is scanned automatically. Spreadsheets and CSVs are summarised ",
+        "column by column; add a description and units for each column."),
+      help_step(3, "Script Order",
+        "Put your scripts in the order someone should run them, and say briefly ",
+        "what each one does."),
+      help_step(4, "R Packages",
+        "Scans your scripts for the packages they use. If the project has an ",
+        "renv.lock, versions come from there."),
+      help_step(5, "Models (optional)",
+        "Record each analysis and where it lives: the outcome as named in your ",
+        "paper, the matching data column, where the method is described, where ",
+        "the results are reported, and the script and line that produced it. ",
+        "Optional, but it is the link people most often need and rarely get."),
+      help_step(6, "Preview & Export",
+        "Check the live preview, then download your README.md."),
+
+      div(class = "alert alert-light border small mb-0",
+        tags$strong("Tip: "),
+        "on the Models tab, use ", tags$em("Suggest from loaded scripts"),
+        " instead of typing line numbers by hand — it finds the line for you ",
+        "and stays right if you edit the script later."),
+
+      footer = tagList(
+        tags$a(href = "https://github.com/EIvimeyCook/READMEBuilder",
+               target = "_blank", class = "btn btn-outline-secondary",
+               icon("github"), " Docs"),
+        modalButton("Got it")
+      )
+    )
+  }
+
+  observeEvent(input$show_help, showModal(help_modal()))
+
+  # First-run: show the walkthrough once, then remember that we have.
+  observe({
+    if (!has_seen_help()) {
+      showModal(help_modal())
+      mark_help_seen()
+    }
+  })
+
   # ── Load folder ──────────────────────────────────────────────────────────────
   observeEvent(input$folder_btn, {
     req(is.list(input$folder_btn))

@@ -26,6 +26,50 @@ logo_svg <- tags$img(
 is_script  <- function(f) str_detect(f, "\\.(R|r|Rmd|rmd|Rnw|rnw|qmd)$")
 is_tabular <- function(f) str_detect(f, "\\.(csv|tsv|txt|xlsx|xls)$")
 
+# ── Help walkthrough support ──────────────────────────────────────────
+# Remembers whether the user has seen the walkthrough, so it shows once on a
+# first run and thereafter only via the Help button. Stored as an empty marker
+# file in the user's config directory; if that is not writable the walkthrough
+# simply shows each launch rather than erroring.
+
+help_flag_path <- function() {
+  dir <- tryCatch(tools::R_user_dir("READMEBuilder", "config"),
+                  error = function(e) file.path(tempdir(), "READMEBuilder"))
+  file.path(dir, "seen_help")
+}
+
+has_seen_help <- function() file.exists(help_flag_path())
+
+mark_help_seen <- function() {
+  p <- help_flag_path()
+  tryCatch({
+    dir.create(dirname(p), recursive = TRUE, showWarnings = FALSE)
+    file.create(p)
+  }, error = function(e) invisible(FALSE))
+  invisible(TRUE)
+}
+
+# ── Demo media ──────────────────────────────────────────────────────
+# Optional screencast shown at the top of the help dialog. Drop a file named
+# demo.mp4 (or demo.gif / demo.webm) into inst/READMEBuilder/www/ and it is
+# picked up automatically; with no such file the dialog just shows the written
+# walkthrough. Shiny serves inst/READMEBuilder/www/ at the app root, so the
+# file is referenced by name only.
+
+demo_media_tag <- function() {
+  www <- file.path("www")
+  for (f in c("demo.mp4", "demo.webm")) {
+    if (file.exists(file.path(www, f)))
+      return(tags$video(src = f, controls = NA, autoplay = NA, muted = NA,
+                        loop = NA, playsinline = NA,
+                        style = "width:100%; border-radius:8px; margin-bottom:0.5rem;"))
+  }
+  if (file.exists(file.path(www, "demo.gif")))
+    return(tags$img(src = "demo.gif", alt = "READMEBuilder walkthrough",
+                    style = "width:100%; border-radius:8px; margin-bottom:0.5rem;"))
+  NULL
+}
+
 # ── Excluded machinery folders ────────────────────────────────────────────────
 # Project folders that hold *installed dependencies* or IDE/VCS state rather
 # than the researcher's own data and code. A restored renv/packrat library is a
@@ -34,11 +78,15 @@ is_tabular <- function(f) str_detect(f, "\\.(csv|tsv|txt|xlsx|xls)$")
 # internal .R files as the user's own scripts, and pollutes the detected package
 # list with dependencies-of-dependencies.
 #
-# NOTE: renv.lock itself lives at the project root, NOT inside renv/library, so
-# it is untouched by this filter and is still found and used for versions.
+# The WHOLE renv/ and packrat/ directories are excluded, not just their library
+# subfolders: renv/activate.R is a generated bootstrap script (not the user's
+# code, and its own requireNamespace("renv") call would otherwise add renv to
+# the detected dependencies), and renv/settings.json is configuration.
+#
+# NOTE: renv.lock sits at the PROJECT ROOT, not inside renv/, so it is untouched
+# by this filter and is still found and used for package and R versions.
 
-exclude_dirs <- c("renv/library", "renv/staging", "renv/local", "renv/cellar",
-                  "renv/sandbox", "packrat/lib", "packrat/src",
+exclude_dirs <- c("renv", "packrat",
                   ".Rproj.user", ".git", ".Rcheck", "node_modules",
                   "__pycache__", ".venv", "venv", ".quarto")
 

@@ -53,6 +53,30 @@ ui <- page_fluid(
       background: #f8f9fa;
       min-height: 100vh;
     }
+    .rb-help-wrap {
+      padding: 0.5rem 8px 1.2rem 8px;
+      margin-top: 0.6rem;
+      border-top: 1px solid rgba(255,255,255,0.12);
+    }
+    .rb-help-btn {
+      width: 100%;
+      color: rgba(255,255,255,0.8);
+      background: rgba(255,255,255,0.08);
+      border: 1px solid rgba(255,255,255,0.18);
+      font-size: 0.82rem;
+      text-align: left;
+    }
+    .rb-help-btn:hover {
+      background: rgba(255,255,255,0.16);
+      color: #fff;
+    }
+    .rb-step {
+      border-left: 3px solid #2196a6;
+      padding: 0.1rem 0 0.1rem 0.9rem;
+      margin-bottom: 1rem;
+    }
+    .rb-step h6 { margin-bottom: 0.25rem; font-weight: 600; }
+    .rb-step p  { margin-bottom: 0.25rem; font-size: 0.9rem; }
     .rb-two-col {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
@@ -89,6 +113,10 @@ ui <- page_fluid(
         nav_panel(tagList(icon("box"),         " R Packages"),     value = "tab_packages", NULL),
         nav_panel(tagList(icon("diagram-project"), " Models"),     value = "tab_models",   NULL),
         nav_panel(tagList(icon("eye"),         " Preview & Export"), value = "tab_preview", NULL)
+      ),
+      div(class = "rb-help-wrap",
+        actionButton("show_help", tagList(icon("circle-question"), " How to use this app"),
+                     class = "btn btn-sm rb-help-btn")
       )
     ),
 
