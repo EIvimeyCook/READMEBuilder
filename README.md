@@ -179,15 +179,6 @@ first time you launch the app, and then not again — the fact that you have see
 it is recorded in a small marker file under `tools::R_user_dir("READMEBuilder",
 "config")`. Delete that file to see the walkthrough again on next launch.
 
-### Adding a demo video
-
-The walkthrough can show a screencast at the top. None ships with the package,
-but you can add one: drop a file named `demo.mp4` (or `demo.webm`, or
-`demo.gif`) into `inst/READMEBuilder/www/` and it is picked up automatically
-next time the app starts. Video files play muted and looped; a GIF is shown as
-an image. With no such file present the dialog simply shows the written
-walkthrough, so nothing breaks if you never add one.
-
 ## Recording models (MLast)
 
 The **Models** tab is entirely optional — leave it empty and nothing is added to
