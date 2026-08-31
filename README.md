@@ -10,10 +10,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE.md)
 <!-- badges: end -->
 
-READMEBuilder is an R package providing an interactive Shiny app that guides
-researchers through documenting a whole project, **both the data and the code**,
-in a single high-quality `README.md` to support reproducible research. It also
-lets you re-open a README the app made earlier and keep editing it.
+READMEBuilder is an R package with an interactive Shiny app that turns a project folder into a single `README.md` documenting both **the data and the code**. 
 
 Good documentation is what makes an analysis reproducible: not just what the data
 columns mean, but which scripts to run and in what order, and which package (and
