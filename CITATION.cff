@@ -5,7 +5,7 @@ authors:
   - family-names: "Ivimey-Cook"
     given-names: "Edward R."
     orcid: "https://orcid.org/0000-0003-4910-0443"
-title: "READMEBuilder: Build structured README files for research repositories"
+title: "READMEBuilder: Guided README Generation for Reproducible Research"
 abstract: "A Shiny application that walks researchers through building a structured README for a data and code repository, capturing metadata, variable descriptions, and separate code and data licences."
 version: 0.2.0
 url: "https://github.com/EIvimeyCook/READMEBuilder"
