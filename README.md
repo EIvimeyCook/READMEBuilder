@@ -118,12 +118,14 @@ tables, the ordered script list, and an R environment table.
 
 A directory map looks like this:
 
+````text
 MyProject/
 ├── data/
 │   └── data.csv
 ├── analysis.R
 ├── report.Rmd
 └── README.md
+````
 
 Each tabular file gets a variable table:
 
@@ -137,7 +139,7 @@ Each tabular file gets a variable table:
 
 And the code and environment are recorded so the analysis can be rerun:
 
-
+````text
 ## Code
 Scripts should be run in the following order:
 
@@ -153,7 +155,7 @@ Scripts should be run in the following order:
 | :------ | :------ |
 | `dplyr`   | 1.1.4 |
 | `ggplot2` | 3.5.1 |
-
+````
 
 If you fill in the optional **Models** tab, a models table is included too:
 
