@@ -2,7 +2,7 @@ Package: READMEBuilder
 Title: Guided README Generation for Reproducible Research
 Version: 0.2.0
 Authors@R:
-    person("Ed", "Ivimey-Cook",
+    person("Edward R.", "Ivimey-Cook",
            email = "e.ivimeycook@gmail.com",
            role  = c("aut", "cre"),
            comment = c(ORCID = "0000-0003-4910-0443"))
