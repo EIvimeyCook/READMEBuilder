@@ -118,29 +118,26 @@ tables, the ordered script list, and an R environment table.
 
 A directory map looks like this:
 
-````text
 MyProject/
 ├── data/
 │   └── data.csv
 ├── analysis.R
 ├── report.Rmd
 └── README.md
-````
 
 Each tabular file gets a variable table:
 
-```text
 **Dimensions:** 150 rows × 2 columns
 
 | Column | Type | Description | Units | Summary |
 | :----- | :--- | :---------- | :---- | :------ |
 | `habitat` | categorical | Habitat type | | levels: A, B, C, D, E \| NAs: 0 |
 | `caterpillar_count` | numeric | Caterpillars per survey | count | range 2–36 \| mean 15.11 \| NAs: 0 |
-```
+
 
 And the code and environment are recorded so the analysis can be rerun:
 
-```text
+
 ## Code
 Scripts should be run in the following order:
 
@@ -156,17 +153,15 @@ Scripts should be run in the following order:
 | :------ | :------ |
 | `dplyr`   | 1.1.4 |
 | `ggplot2` | 3.5.1 |
-```
+
 
 If you fill in the optional **Models** tab, a models table is included too:
 
-```text
 ## Models
 
 | Outcome (paper) | Outcome (data) | Predictors (data) | Test | Methods location | Results location | Code location | Notes |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 | Proportion scrounging | PropPS | Opponent_propPS_average | Linear Regression | Methods, p.4 | Table 2, p.7 | sem.R:3 | Type III SS |
-```
 
 ## Getting help inside the app
 
