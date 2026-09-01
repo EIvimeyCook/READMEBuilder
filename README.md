@@ -291,8 +291,7 @@ Please file issues and feature requests at
 
 ## Citation
 
-If READMEBuilder helps with your work, please cite it (adjust the year as
-needed):
+If READMEBuilder helps with your work, please cite it:
 
 > Ivimey-Cook, E. R. (2026). *READMEBuilder: Build high-quality READMEs for
 > reproducible research* R package.
