@@ -7,24 +7,36 @@
 build_readme()
 }
 \value{
-Launches the Shiny app; does not return a value. Produces a .MD file.
+Launches the Shiny app; does not return a value. Produces a
+\code{README.md} file.
 }
 \description{
 Opens an interactive Shiny application that guides you through building a
-high-quality README file for a research dataset or code repository.
+high-quality README file for a research dataset or code repository, covering
+both the data and the code so the work can be reproduced.
 }
 \details{
-The app walks through five steps:
+The app walks through six steps:
 \enumerate{
-\item \strong{Project Info} — title, abstract, DOI(s), licence, authors, funders
-\item \strong{Files} — load a project folder; tabular files are auto-described
-(column types, ranges, levels); add descriptions and units per column;
-specify collection dates and locations
-\item \strong{Script Order} — define the run order of R/Rmd/Quarto scripts
-\item \strong{R Packages} — scan scripts for \code{library()} / \code{require()}
-calls and resolve installed versions
-\item \strong{Preview & Export} — live Markdown preview and one-click download
-of \code{README.md}
+\item \strong{Project Info}: title, description, abstract, instructions,
+DOI(s), citation, authors, affiliations, contact, funders,
+acknowledgements, and separate code and data licences. An existing
+README made by the app can be uploaded here to reload and edit it.
+\item \strong{Files}: load a project folder. A directory map is shown and
+included in the export; tabular files are auto-described (column
+types, ranges, levels, NAs); add descriptions and units per column,
+and the date(s) and location of data collection.
+\item \strong{Script Order}: define the run order of R/Rmd/Quarto scripts
+and describe each one.
+\item \strong{R Packages}: scan scripts for \code{library()},
+\code{require()}, \code{requireNamespace()}, \code{pkg::fun}, and the
+pacman, librarian, import, and groundhog loaders, then resolve each
+version. If an \code{renv.lock} is present, its recorded versions
+(and R version) are used.
+\item \strong{Models} (optional): record where each analysis is
+described, reported, and coded (an MLast-style table).
+\item \strong{Preview & Export}: live Markdown preview and one-click
+download of \code{README.md}.
 }
 }
 \examples{
