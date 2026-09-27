@@ -25,7 +25,7 @@ share (for example on Zenodo, Dryad, or GitHub).
 - **Documents data *and* code together.** Column-level data summaries sit
   alongside the script run order, dependencies, and environment that make an
   analysis reproducible.
-- **Guided, five-step workflow** from project metadata to a downloadable `README.md`.
+- **Guided, six-step workflow** from project metadata to a downloadable `README.md`.
 - **Automatic data description.** Point at a folder and every tabular file is
   summarised column-by-column (types, ranges, levels, missing values).
 - **Script run order.** Record the exact order scripts should be executed, each
