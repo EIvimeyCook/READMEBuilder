@@ -25,7 +25,7 @@ share (for example on Zenodo, Dryad, or GitHub).
 - **Documents data *and* code together.** Column-level data summaries sit
   alongside the script run order, dependencies, and environment that make an
   analysis reproducible.
-- **Guided, five-step workflow** from project metadata to a downloadable `README.md`.
+- **Guided, six-step workflow** from project metadata to a downloadable `README.md`.
 - **Automatic data description.** Point at a folder and every tabular file is
   summarised column-by-column (types, ranges, levels, missing values).
 - **Script run order.** Record the exact order scripts should be executed, each
@@ -33,7 +33,9 @@ share (for example on Zenodo, Dryad, or GitHub).
 - **Dependency and environment capture.** Scans your scripts and resolves the
   installed version of every package, plus the R version.
 - **Directory map.** An ASCII tree of your project, embedded in the README.
-- **Separate code and data licences.** Pick from a list or type your own.
+- **Separate code and data licences.** One-click buttons for the common choices
+  (MIT, Apache 2.0 or GPL-3.0 for code; CC0 or CC BY 4.0 for data), or pick from
+  the full list or type your own.
 - **Model location and specification (MLast).** Optionally record each analysis
   and link it to the data, with *separate* fields for where the method is
   described, where the results are reported, and where the code lives.
@@ -255,19 +257,19 @@ files and their contents stay on your machine: folder browsing, file reading, an
 package resolution all happen locally, and nothing you load is uploaded to any
 server.
 
-The one exception is cosmetic. The app's theme uses the Inter font from Google
-Fonts, so on first launch it fetches that font from Google's servers (and caches
-it afterwards). No file data is included in that request. If you want zero
-external calls, swap the theme to a system font.
+The one exception is cosmetic. The app's theme asks your browser to load the
+Inter font from Google Fonts. No file data is included in that request, and if
+it cannot be reached (offline, or behind a strict firewall) the app still starts
+and simply uses your system font.
 
 ## Requirements
 
 READMEBuilder depends on the following R packages, installed automatically with
 the command above:
 
-`shiny`, `bslib`, `tidyverse`, `readxl`, `stringr`, `purrr`, `shinyFiles`, `fs`,
-and `jsonlite` (used to read `renv.lock`; the lockfile step is skipped if it is
-not installed).
+`shiny`, `bslib`, `tidyverse`, `readxl`, `stringr`, `purrr`, `shinyFiles` and `fs`.
+`jsonlite` is optional: it is used to read `renv.lock`, and the lockfile step is
+skipped if it is not installed. Install it with `install.packages("jsonlite")`.
 
 ## Tips and limitations
 

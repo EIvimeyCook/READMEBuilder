@@ -23,6 +23,30 @@ logo_svg <- tags$img(
 
 `%||%` <- function(a, b) if (!is.null(a) && nzchar(trimws(a))) trimws(a) else b
 
+# ── DOI and badge helpers ─────────────────────────────────────────────────────
+# Split the DOI field on ";" or new lines and strip any resolver prefix a user
+# pasted (https://doi.org/, http://dx.doi.org/, doi:), so the link is never
+# doubled. A ";" only counts as a separator when the next entry looks like a
+# DOI, because some older DOIs (Wiley SICI) contain ";" themselves.
+normalise_doi <- function(x) {
+  d <- str_trim(str_split(x %||% "",
+         regex(";\\s*(?=(?:https?://|doi:|10\\.))|\\r?\\n", ignore_case = TRUE))[[1]])
+  d <- str_remove(d, regex("^(https?://(dx\\.)?doi\\.org/|doi:\\s*)", ignore_case = TRUE))
+  d <- str_remove(d, "[;\\s]+$")
+  unique(d[nzchar(d)])
+}
+
+# shields.io static badges use "-" as the label/message/colour separator and
+# "_" as a space, so literal dashes and underscores must be doubled BEFORE
+# percent-encoding. Without this, DOIs like 10.1111/2041-210X.13118 and
+# licences like GPL-3.0 or CC BY-NC 4.0 produce broken badges.
+badge_esc <- function(x) {
+  URLencode(str_replace_all(str_replace_all(x, "-", "--"), "_", "__"), reserved = TRUE)
+}
+
+# Parentheses in a DOI (e.g. old SICI DOIs) would end a Markdown link early.
+href_esc <- function(x) str_replace_all(x, c("\\(" = "%28", "\\)" = "%29"))
+
 is_script  <- function(f) str_detect(f, "\\.(R|r|Rmd|rmd|Rnw|rnw|qmd)$")
 is_tabular <- function(f) str_detect(f, "\\.(csv|tsv|txt|xlsx|xls)$")
 
@@ -119,6 +143,24 @@ license_choices <- c(
   "Etalab Open Licence 2.0 (France)",
   "Unlicense", "WTFPL", "All rights reserved"
 )
+
+# One-click shortcuts for the most common licences, shown under each licence
+# selector. Values must match entries in license_choices exactly.
+license_picks_code <- c("MIT" = "MIT", "Apache 2.0" = "Apache 2.0",
+                        "GPL-3.0" = "GPL-3.0")
+license_picks_data <- c("CC0" = "CC0 1.0 (public domain)", "CC BY 4.0" = "CC BY 4.0")
+
+license_quick_picks <- function(target, picks, hint = NULL) {
+  div(class = "rb-lic-picks",
+    tags$span(class = "text-muted small me-1", "Common:"),
+    lapply(names(picks), function(lbl)
+      tags$button(type = "button", class = "btn btn-sm btn-outline-secondary rb-chip",
+        onclick = sprintf(
+          "Shiny.setInputValue('lic_pick',{id:'%s',val:'%s'},{priority:'event'})",
+          target, picks[[lbl]]),
+        lbl)),
+    if (!is.null(hint)) tags$div(class = "form-text mt-1", hint))
+}
 
 # ── MLast (Model Location and Specification table) ───────────────────────────
 # Optional, per-project table recording, for each analysis: its outcome and
@@ -255,15 +297,32 @@ auto_describe <- function(path) {
   if (!ext %in% c("csv", "tsv", "txt", "xlsx", "xls")) return(NULL)
 
   out <- tryCatch({
+    # Sniff the delimiter from the header line: semicolon-delimited CSVs
+    # (decimal comma, common in Europe) otherwise read as one "x;y" column.
+    # A .txt is only treated as a table if it is TAB-delimited, with the same
+    # number of tabs on each of its first few lines. Commas and semicolons are
+    # not trusted in .txt files: ordinary prose ("dried, weighed, frozen") can
+    # have a consistent comma count, and would be summarised as a fake table.
+    delim <- if (ext %in% c("csv", "txt")) {
+      head5 <- tryCatch(readLines(path, n = 5L, warn = FALSE), error = function(e) character(0))
+      head5 <- head5[nzchar(str_trim(head5))]
+      first <- if (length(head5)) head5[1] else ""
+      seps  <- c(tab = "\t", semi = ";", comma = ",")
+      n_sep <- vapply(seps, function(p) str_count(first, p), integer(1))
+      best  <- if (all(n_sep == 0)) "comma" else names(n_sep)[which.max(n_sep)]
+      if (ext == "txt") {
+        counts <- str_count(head5, "\t")
+        if (length(head5) < 2 || any(counts == 0) || length(unique(counts)) > 1) "none" else "tab"
+      } else best
+    } else if (ext == "tsv") "tab" else NA_character_
+    if (identical(delim, "none")) return(NULL)
+
     df <- suppressWarnings(suppressMessages(
-      switch(ext,
-        csv  = readr::read_csv(path,  show_col_types = FALSE, name_repair = "unique"),
-        tsv  = readr::read_tsv(path,  show_col_types = FALSE, name_repair = "unique"),
-        txt  = readr::read_tsv(path,  show_col_types = FALSE, name_repair = "unique"),
-        xlsx = readxl::read_excel(path, .name_repair = "unique"),
-        xls  = readxl::read_excel(path, .name_repair = "unique"),
-        NULL
-      )
+      if (ext %in% c("xlsx", "xls")) readxl::read_excel(path, .name_repair = "unique")
+      else switch(delim,
+        tab   = readr::read_tsv(path,  show_col_types = FALSE, name_repair = "unique"),
+        semi  = readr::read_csv2(path, show_col_types = FALSE, name_repair = "unique"),
+        comma = readr::read_csv(path,  show_col_types = FALSE, name_repair = "unique"))
     ))
 
     if (is.null(df) || ncol(df) == 0 || nrow(df) == 0) return(NULL)
@@ -404,7 +463,7 @@ extract_packages <- function(folder) {
   if (length(pkgs)) {
     is_base <- vapply(pkgs, function(p)
       identical(unname(tryCatch(
-        utils::packageDescription(p, fields = "Priority"),
+        suppressWarnings(utils::packageDescription(p, fields = "Priority")),
         error = function(e) NA_character_)), "base"),
       logical(1))
     pkgs <- pkgs[!is_base]
@@ -476,8 +535,18 @@ parse_readme <- function(text) {
   h1    <- which(str_detect(lines, "^#\\s+"))
   title <- if (length(h1)) str_trim(str_remove(lines[h1[1]], "^#\\s+")) else ""
 
-  m   <- str_match_all(text, "https?://doi\\.org/([^)\\s]+)")[[1]]
-  doi <- if (nrow(m) > 0) paste(unique(str_trim(m[, 2])), collapse = "; ") else ""
+  # DOIs come from the badge line(s) only -- everything above the first "##"
+  # heading. Scanning the whole file would also pick up DOIs quoted in the
+  # citation, additional information or model notes, and each import/export
+  # cycle would then add them as extra badges.
+  first_h2 <- which(str_detect(lines, "^##\\s"))[1]
+  header   <- if (is.na(first_h2)) lines else head(lines, first_h2 - 1)
+  m   <- str_match_all(paste(header, collapse = "\n"),
+                       "\\]\\(https?://(?:dx\\.)?doi\\.org/([^)\\s]+)\\)")[[1]]
+  doi <- if (nrow(m) > 0) {
+    d <- normalise_doi(paste(map_chr(m[, 2], URLdecode), collapse = ";"))
+    paste(d, collapse = "; ")
+  } else ""
 
   # Map each level-2 heading to its body lines (excluding ### headings),
   # stopping each body at a horizontal rule so the footer never leaks in.
@@ -518,8 +587,8 @@ parse_readme <- function(text) {
   }
   citation_text <- {
     q <- sec_body("Citation")
-    q <- q[str_detect(q, "^\\s*>\\s+")]
-    if (length(q)) str_trim(str_remove(q[1], "^\\s*>\\s+")) else ""
+    q <- q[str_detect(q, "^\\s*>")]
+    if (length(q)) str_trim(paste(str_remove(q, "^\\s*>\\s?"), collapse = "\n")) else ""
   }
 
   lic <- function(word) {
@@ -713,19 +782,19 @@ assemble_readme <- function(meta, files, descriptions, auto, pkgs,
   push(paste0("# ", meta$title %||% "Untitled Project"))
 
   badges <- character(0)
-  dois   <- keep(str_trim(str_split(meta$doi %||% "", ";")[[1]]), nzchar)
+  dois   <- normalise_doi(meta$doi)
   for (d in dois)
     badges <- c(badges, sprintf(
       "[![DOI](https://img.shields.io/badge/DOI-%s-blue)](https://doi.org/%s)",
-      URLencode(d, TRUE), d))
+      badge_esc(d), href_esc(d)))
   if (nzchar(meta$license_code %||% ""))
     badges <- c(badges, sprintf(
       "![Code License](https://img.shields.io/badge/code%%20license-%s-green)",
-      URLencode(meta$license_code, TRUE)))
+      badge_esc(meta$license_code)))
   if (nzchar(meta$license_data %||% ""))
     badges <- c(badges, sprintf(
       "![Data License](https://img.shields.io/badge/data%%20license-%s-blue)",
-      URLencode(meta$license_data, TRUE)))
+      badge_esc(meta$license_data)))
   if (length(badges)) push(paste(badges, collapse = " "))
 
   if (nzchar(meta$description  %||% "")) push("## Description",  meta$description)
@@ -750,9 +819,14 @@ assemble_readme <- function(meta, files, descriptions, auto, pkgs,
   if (nzchar(meta$acknowledgements %||% ""))
     push("## Acknowledgements", meta$acknowledgements)
 
-  if (length(dois) > 0) {
-    push("## Citation", "If you use this work please cite it using the DOI(s) above.")
-    if (nzchar(meta$citation_text %||% "")) push(paste0("> ", meta$citation_text))
+  # Shown if there is a DOI OR citation text (previously citation text was
+  # silently dropped when no DOI was given). Every line of a multi-line
+  # citation is quoted so the importer can read all of it back.
+  cit <- meta$citation_text %||% ""
+  if (length(dois) > 0 || nzchar(cit)) {
+    push("## Citation",
+         if (length(dois) > 0) c("If you use this work please cite it using the DOI(s) above.", ""),
+         if (nzchar(cit)) paste0("> ", str_split(cit, "\r?\n")[[1]]))
   }
 
   # Licence — separate entries for code and data.

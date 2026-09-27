@@ -144,6 +144,13 @@ server <- function(input, output, session) {
     showNotification("Cleared. Form reset to a blank README.", type = "message")
   })
 
+  # Common-licence shortcut buttons under each licence selector.
+  observeEvent(input$lic_pick, {
+    id <- input$lic_pick$id
+    req(id %in% c("license_code", "license_data"))
+    updateSelectizeInput(session, id, selected = input$lic_pick$val)
+  })
+
   output$import_status <- renderUI({
     req(rv$import_msg)
     div(class = "alert alert-success py-2 px-3 small mb-0 mt-2",
@@ -151,7 +158,7 @@ server <- function(input, output, session) {
         " Edit anything below, then export from the ", strong("Preview & Export"), " tab.")
   })
 
-  # ââ Help / walkthrough ââââââââââââââââââââââââââââââââââââââââââââââ
+  # ── Help / walkthrough ──────────────────────────────────────────────
   # Shown on demand from the sidebar, and once automatically on a user's first
   # session (tracked in a small file under the user's config dir, so it does not
   # nag on every launch).
@@ -403,6 +410,16 @@ server <- function(input, output, session) {
   outputOptions(output, "script_order_ui", suspendWhenHidden = FALSE)
 
   observeEvent(input$script_move, {
+    # Reordering re-renders the list, which recreates every description box
+    # from rv$imp_scriptdesc. Save what has been typed first, keyed by path,
+    # or every description is wiped on the first arrow click.
+    sd <- rv$imp_scriptdesc
+    for (i in rv$script_order) {
+      val <- input[[paste0("script_desc_", i)]]
+      if (!is.null(val)) sd[[rv$files[i]]] <- val
+    }
+    rv$imp_scriptdesc <- sd
+
     pos <- input$script_move$pos; dir <- input$script_move$dir
     n   <- length(rv$script_order)
     if (dir == "up"   && pos > 1) rv$script_order[c(pos-1,pos)] <- rv$script_order[c(pos,pos-1)]

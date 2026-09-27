@@ -4,7 +4,7 @@
 #' high-quality README file for a research dataset or code repository, covering
 #' both the data and the code so the work can be reproduced.
 #'
-#' The app walks through five steps:
+#' The app walks through six steps:
 #' \enumerate{
 #'   \item \strong{Project Info}: title, description, abstract, instructions,
 #'         DOI(s), citation, authors, affiliations, contact, funders,
@@ -21,6 +21,8 @@
 #'         pacman, librarian, import, and groundhog loaders, then resolve each
 #'         version. If an \code{renv.lock} is present, its recorded versions
 #'         (and R version) are used.
+#'   \item \strong{Models} (optional): record where each analysis is
+#'         described, reported, and coded (an MLast-style table).
 #'   \item \strong{Preview & Export}: live Markdown preview and one-click
 #'         download of \code{README.md}.
 #' }

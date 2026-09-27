@@ -6,7 +6,9 @@ ui <- page_fluid(
   theme = bs_theme(
     bootswatch = "flatly",
     primary    = "#1a3a52",
-    base_font  = font_google("Inter")
+    base_font  = font_collection(font_google("Inter", local = FALSE),
+                                 "system-ui", "-apple-system", "Segoe UI",
+                                 "Roboto", "Helvetica Neue", "Arial", "sans-serif")
   ),
 
   tags$head(tags$style(HTML("
@@ -98,6 +100,8 @@ ui <- page_fluid(
       margin: 0;
     }
     .rb-import .card-header { background: #e8f4f6; }
+    .rb-lic-picks { margin-top: -0.5rem; margin-bottom: 0.75rem; }
+    .rb-chip { padding: 0.1rem 0.55rem; font-size: 0.78rem; margin: 0 0.25rem 0.25rem 0; }
   "))),
 
   div(class = "d-flex",
@@ -106,7 +110,7 @@ ui <- page_fluid(
     div(class = "rb-sidenav", style = "width:200px; flex-shrink:0;",
       div(class = "rb-logo", logo_svg),
       navset_pill_list(
-        id = "main_nav", well = FALSE,
+        id = "main_nav", well = FALSE, widths = c(12, 12),
         nav_panel(tagList(icon("circle-info"), " Project Info"),  value = "tab_project",  NULL),
         nav_panel(tagList(icon("folder-open"), " Files"),          value = "tab_files",    NULL),
         nav_panel(tagList(icon("list-ol"),     " Script Order"),   value = "tab_scripts",  NULL),
@@ -169,10 +173,18 @@ ui <- page_fluid(
                           placeholder = "Smith J, Doe J (2024). Title. Journal. 10.1234/xyz"),
             # Two separate licences (free-typed values allowed, e.g. "CC-BY-4.0").
             layout_column_wrap(width = "220px", gap = "0.75rem",
-              selectizeInput("license_code", "Code license", choices = license_choices,
-                             options = list(create = TRUE, placeholder = "Select or type…")),
-              selectizeInput("license_data", "Data license", choices = license_choices,
-                             options = list(create = TRUE, placeholder = "Select or type…"))
+              div(
+                selectizeInput("license_code", "Code license", choices = license_choices,
+                               options = list(create = TRUE, placeholder = "Select or type…")),
+                license_quick_picks("license_code", license_picks_code,
+                  "MIT and Apache 2.0 are permissive; GPL-3.0 requires derived code to stay open.")
+              ),
+              div(
+                selectizeInput("license_data", "Data license", choices = license_choices,
+                               options = list(create = TRUE, placeholder = "Select or type…")),
+                license_quick_picks("license_data", license_picks_data,
+                  "Dryad requires CC0; Zenodo defaults to CC BY 4.0.")
+              )
             )
           ),
           card(

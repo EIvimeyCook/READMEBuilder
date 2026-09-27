@@ -1,6 +1,6 @@
 Package: READMEBuilder
 Title: Guided README Generation for Reproducible Research
-Version: 0.2.0
+Version: 0.2.1
 Authors@R:
     person("Edward R.", "Ivimey-Cook",
            email = "e.ivimeycook@gmail.com",
