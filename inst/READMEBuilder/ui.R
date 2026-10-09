@@ -292,7 +292,8 @@ ui <- page_fluid(
                       placeholder = "e.g. age, sex, bmi_category"),
             div(class = "rb-two-col",
               selectizeInput("model_test_type", "Test / model type",
-                choices = c("Linear Regression", "Logistic Regression", "Correlation",
+                # "" first so the box starts (and is reset after "Add model") empty.
+                choices = c("", "Linear Regression", "Logistic Regression", "Correlation",
                             "ANOVA", "Mixed Model", "Other"),
                 options = list(create = TRUE, placeholder = "Select or type…")),
               textInput("model_methods_loc", "Methods location",

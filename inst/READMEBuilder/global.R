@@ -4,7 +4,8 @@
 
 library(shiny)
 library(bslib)
-library(tidyverse)
+library(dplyr, warn.conflicts = FALSE)   # bind_rows(), tibble()
+library(readr)
 library(readxl)
 library(stringr)
 library(purrr)
@@ -49,6 +50,56 @@ href_esc <- function(x) str_replace_all(x, c("\\(" = "%28", "\\)" = "%29"))
 
 is_script  <- function(f) str_detect(f, "\\.(R|r|Rmd|rmd|Rnw|rnw|qmd)$")
 is_tabular <- function(f) str_detect(f, "\\.(csv|tsv|txt|xlsx|xls)$")
+
+# Files listed under "Data Files". A .txt only counts as data when it was
+# actually read as a table; prose .txt files (notes, protocols) are "Other".
+is_data_file <- function(files, auto) {
+  if (!length(files)) return(logical(0))
+  described <- vapply(seq_along(files),
+                      function(i) i <= length(auto) && !is.null(auto[[i]]), logical(1))
+  is_tabular(files) & (described | !str_detect(files, "\\.txt$"))
+}
+
+# "1 file", "2 files".
+plural <- function(n, word) paste(n, if (n == 1) word else paste0(word, "s"))
+
+# Strip a bullet the user typed themselves ("- Jane", "* Jane") so it is not
+# exported as a nested "- - Jane".
+strip_bullet <- function(x) str_remove(x, "^\\s*[-*+]\\s+")
+
+# ── Raw-HTML escaping ──────────────────────────────────────────────────────────
+# GitHub treats "<word ...>" as an HTML tag and drops it, so user text such as
+# "<Title>" or a factor level "<test>" would vanish from the rendered README.
+# Tag-like "<" is written as "\<" (a Markdown backslash escape). Code spans and
+# fenced blocks are left alone, as are autolinks (<https://...>, <a@b.org>)
+# and the <br> that table cells use for line breaks.
+# parse_readme() applies the exact inverse, so text round-trips unchanged.
+
+map_outside_code <- function(lines, f) {
+  in_fence <- FALSE
+  for (k in seq_along(lines)) {
+    l <- lines[k]
+    if (str_detect(l, "^\\s*(```|~~~)")) { in_fence <- !in_fence; next }
+    if (in_fence || !str_detect(l, "<")) next
+    loc <- str_locate_all(l, "(`+).*?\\1")[[1]]
+    if (!nrow(loc)) { lines[k] <- f(l); next }
+    out <- character(0); pos <- 1L
+    for (r in seq_len(nrow(loc))) {
+      out <- c(out, f(substr(l, pos, loc[r, 1] - 1L)), substr(l, loc[r, 1], loc[r, 2]))
+      pos <- loc[r, 2] + 1L
+    }
+    lines[k] <- paste(c(out, f(substr(l, pos, nchar(l)))), collapse = "")
+  }
+  lines
+}
+
+md_escape_html <- function(lines) map_outside_code(lines, function(x)
+  str_replace_all(x, paste0("(?<!\\\\)<(?=[A-Za-z/!?])(?!br>)",
+                            "(?![A-Za-z][A-Za-z0-9+.-]*:[^\\s>]*>)",
+                            "(?![^\\s<>@]+@[^\\s<>]+>)"), "\\\\<"))
+
+md_unescape_html <- function(lines) map_outside_code(lines, function(x)
+  str_replace_all(x, "\\\\<(?=[A-Za-z/!?])", "<"))
 
 # ── Help walkthrough support ──────────────────────────────────────────
 # Remembers whether the user has seen the walkthrough, so it shows once on a
@@ -202,15 +253,18 @@ find_code_locations <- function(folder, pattern) {
                        recursive = TRUE, full.names = TRUE, all.files = TRUE)
   # Only search the researcher's own scripts, not installed dependencies.
   rel   <- str_remove(files, fixed(paste0(folder, .Platform$file.sep)))
-  files <- files[!is_excluded(rel)]
+  keep_ <- !is_excluded(rel)
+  files <- files[keep_]; rel <- rel[keep_]
   if (!length(files)) return(empty)
 
-  hits <- map_dfr(files, function(f) {
-    ls <- tryCatch(readLines(f, warn = FALSE), error = function(e) character(0))
+  # Report the path relative to the project root, so two scripts with the same
+  # name in different folders (e.g. a/clean.R, b/clean.R) can be told apart.
+  hits <- map_dfr(seq_along(files), function(k) {
+    ls <- tryCatch(readLines(files[k], warn = FALSE), error = function(e) character(0))
     if (!length(ls)) return(NULL)
     idx <- which(str_detect(ls, fixed(pattern, ignore_case = TRUE)))
     if (!length(idx)) return(NULL)
-    tibble(script = basename(f), line = idx, snippet = str_trim(ls[idx]))
+    tibble(script = rel[k], line = idx, snippet = str_trim(ls[idx]))
   })
 
   if (is.null(hits) || nrow(hits) == 0) empty else hits
@@ -259,6 +313,15 @@ build_dir_tree <- function(files, root = "project") {
   }
 
   c(paste0(root, "/"), render_level(split_paths, ""))
+}
+
+# Files in the order the directory map lists them (folders first, then files,
+# case-insensitively at each level) -- the same order an imported README gives,
+# so a loaded folder and its re-imported README number their files alike.
+tree_order <- function(files) {
+  if (!length(files)) return(files)
+  ord <- parse_dir_tree(build_dir_tree(files)[-1])
+  c(ord[ord %in% files], setdiff(files, ord))
 }
 
 # parse_dir_tree(): reverse of build_dir_tree(). Given the body lines of a
@@ -317,6 +380,12 @@ auto_describe <- function(path) {
     } else if (ext == "tsv") "tab" else NA_character_
     if (identical(delim, "none")) return(NULL)
 
+    # Workbooks: only the first sheet is summarised, but every sheet name is
+    # recorded so the README says what else the file holds.
+    sheets <- if (ext %in% c("xlsx", "xls"))
+      tryCatch(readxl::excel_sheets(path), error = function(e) character(0))
+    else character(0)
+
     df <- suppressWarnings(suppressMessages(
       if (ext %in% c("xlsx", "xls")) readxl::read_excel(path, .name_repair = "unique")
       else switch(delim,
@@ -367,7 +436,7 @@ auto_describe <- function(path) {
       }
     })
 
-    list(nrow = nrow(df), ncol = ncol(df), cols = col_data)
+    list(nrow = nrow(df), ncol = ncol(df), cols = col_data, sheets = sheets)
   },
   error = function(e) NULL)
 
@@ -380,17 +449,49 @@ auto_describe <- function(path) {
 # Detection covers:
 #   * library(pkg) / require(pkg) / requireNamespace("pkg")
 #   * namespace calls  pkg::fun  and  pkg:::fun
-#   * pacman::p_load(a, b, c)  and  p_load(a, b, c)
+#   * pacman::p_load(a, b, c), p_load(a, b, c) and p_load(char = c("a", "b"))
+#
+# Only R code is scanned: comments are stripped, and for .Rmd/.qmd/.Rnw only
+# the R code chunks are read, so prose mentioning library(x) is ignored.
 #
 # Version resolution: if an renv.lock is present in the folder, the versions
 # (and the R version) recorded there are used in preference to whatever is
 # installed in the current session; anything detected but not in the lockfile
-# falls back to packageVersion(). Reading renv.lock needs the 'jsonlite'
-# package; if it is missing, the lockfile step is skipped and installed
-# versions are used.
+# falls back to packageVersion(). Each version's origin is kept in a Source
+# column ("renv.lock", "installed", "not installed") so a README never passes
+# off a mix of the two as one consistent environment. Reading renv.lock needs
+# the 'jsonlite' package; if it is missing, the lockfile step is skipped and
+# installed versions are used.
 #
-# Returns a list: $pkgs (tibble Package/Version), $n_files, $n_total, $folder,
-# $filenames, $lock_file, $lock_r_version, $n_from_lock.
+# Returns a list: $pkgs (tibble Package/Version/Source), $n_files, $n_total,
+# $folder, $filenames, $lock_file, $lock_r_version, $n_from_lock.
+
+# The R code in a script: the whole file for .R, only the code chunks for
+# .Rmd/.qmd (```{r ...} ... ```) and .Rnw (<<...>>= ... @).
+r_code_lines <- function(lines, path) {
+  ext <- tolower(tools::file_ext(path))
+  if (!length(lines) || ext == "r") return(lines)
+  if (ext == "rnw") {
+    start <- "^\\s*<<.*>>=\\s*$"; end <- "^\\s*@"
+  } else {
+    start <- "^\\s*(`{3,}|~{3,})\\s*\\{\\s*[rR](\\s|,|\\})"; end <- "^\\s*(`{3,}|~{3,})\\s*$"
+  }
+  keep_ <- logical(length(lines)); inside <- FALSE
+  for (k in seq_along(lines)) {
+    if (!inside && str_detect(lines[k], start)) { inside <- TRUE; next }
+    if (inside && str_detect(lines[k], end))    { inside <- FALSE; next }
+    keep_[k] <- inside
+  }
+  lines[keep_]
+}
+
+# Remove # comments, leaving any "#" inside a string or backtick name alone.
+strip_r_comments <- function(lines) {
+  if (!length(lines)) return(lines)
+  str_replace_all(lines,
+    "\"(?:[^\"\\\\]|\\\\.)*\"|'(?:[^'\\\\]|\\\\.)*'|`[^`]*`|#.*$",
+    function(m) ifelse(str_detect(m, "^#"), "", m))
+}
 
 extract_packages <- function(folder) {
   folder    <- normalizePath(folder, mustWork = FALSE)
@@ -410,19 +511,30 @@ extract_packages <- function(folder) {
   pkgs <- character(0)
   for (f in r_files) {
     lines <- tryCatch(readLines(f, warn = FALSE), error = function(e) character(0))
+    lines <- strip_r_comments(r_code_lines(lines, f))   # code chunks only, no comments
     if (!length(lines)) next
-    lines <- lines[!str_detect(lines, "^\\s*#")]          # drop whole-line comments
     text  <- paste(lines, collapse = "\n")
 
     # library(pkg) / require(pkg) / requireNamespace("pkg")
     # Lookbehind so substrings like groundhog.library( or bookshelf( don't match.
-    m1 <- str_match_all(text,
-      "(?<![A-Za-z0-9._])(?:library|require|requireNamespace)\\s*\\(\\s*[\"']?([A-Za-z][A-Za-z0-9._]*)[\"']?")[[1]]
-    if (nrow(m1) > 0) pkgs <- c(pkgs, m1[, 2])
+    # An UNQUOTED name is a variable, not a package, when the call has
+    # character.only = TRUE (library(p, character.only = TRUE)) or is
+    # requireNamespace(), which always takes a string.
+    m1 <- str_match_all(text, paste0(
+      "(?<![A-Za-z0-9._])(library|require|requireNamespace)\\s*\\(\\s*",
+      "([\"']?)([A-Za-z][A-Za-z0-9._]*)\\2([^)]*)\\)"))[[1]]
+    if (nrow(m1) > 0) {
+      is_var <- !nzchar(m1[, 3]) &
+        (m1[, 2] == "requireNamespace" | str_detect(m1[, 5], "character\\.only"))
+      pkgs <- c(pkgs, m1[!is_var, 4])
+    }
 
     # namespace calls: pkg::fun and pkg:::fun. Also catches the loader packages
     # themselves when namespaced (pacman, librarian, import, groundhog).
-    m2 <- str_match_all(text, "([A-Za-z][A-Za-z0-9.]*):::?")[[1]]
+    # Searched with string literals blanked, so "see dplyr::filter" inside a
+    # message() is not counted.
+    no_str <- str_replace_all(text, "\"(?:[^\"\\\\]|\\\\.)*\"|'(?:[^'\\\\]|\\\\.)*'", "\"\"")
+    m2 <- str_match_all(no_str, "(?<![A-Za-z0-9._])([A-Za-z][A-Za-z0-9.]*):::?")[[1]]
     if (nrow(m2) > 0) pkgs <- c(pkgs, m2[, 2])
 
     # Flat comma-lists: pacman::p_load(...) and librarian::shelf(...)
@@ -433,6 +545,12 @@ extract_packages <- function(folder) {
       arg_lists <- c(fl[, 2], fl[, 3])
       arg_lists <- arg_lists[!is.na(arg_lists) & nzchar(arg_lists)]
       for (args in arg_lists) {
+        # p_load(char = c("a", "b")) / p_load(char = "a"): take the quoted names.
+        if (str_detect(args, "(^|,)\\s*char\\s*=")) {
+          q <- str_match_all(args, "[\"']([A-Za-z][A-Za-z0-9._]*)[\"']")[[1]]
+          if (nrow(q) > 0) pkgs <- c(pkgs, q[, 2])
+          next
+        }
         toks <- str_trim(str_replace_all(str_split(args, ",")[[1]], "[\"']", ""))
         toks <- toks[!str_detect(toks, "=")]                       # drop named args
         toks <- toks[str_detect(toks, "^[A-Za-z][A-Za-z0-9._]*$")] # keep identifiers
@@ -497,16 +615,19 @@ extract_packages <- function(folder) {
   }
 
   # ---- resolve a version for each detected package ----
+  # Returns c(version, source) so the README can say where each version came from.
   resolve <- function(p) {
-    if (p %in% names(lock_versions) && !is.na(lock_versions[[p]])) return(lock_versions[[p]])
-    tryCatch(as.character(packageVersion(p)), error = function(e) "not installed")
+    if (p %in% names(lock_versions) && !is.na(lock_versions[[p]]))
+      return(c(lock_versions[[p]], "renv.lock"))
+    tryCatch(c(as.character(packageVersion(p)), "installed"),
+             error = function(e) c("—", "not installed"))
   }
-  version     <- if (length(pkgs)) vapply(pkgs, resolve, character(1)) else character(0)
+  res         <- if (length(pkgs)) vapply(pkgs, resolve, character(2)) else matrix(character(0), 2, 0)
   n_from_lock <- sum(pkgs %in% names(lock_versions))
 
   list(
-    pkgs = if (!length(pkgs)) tibble(Package = character(), Version = character())
-           else tibble(Package = pkgs, Version = unname(version)),
+    pkgs = if (!length(pkgs)) tibble(Package = character(), Version = character(), Source = character())
+           else tibble(Package = pkgs, Version = unname(res[1, ]), Source = unname(res[2, ])),
     n_files = length(r_files), n_total = length(all_files),
     folder = folder, filenames = basename(r_files),
     lock_file = lock_file, lock_r_version = lock_r_version, n_from_lock = n_from_lock
@@ -519,6 +640,16 @@ extract_packages <- function(folder) {
 # structural content (files, column metadata, script order, packages, R version)
 # so a previous README can be fully re-loaded WITHOUT the original data folder.
 #
+# Round-trip rules (so export -> import -> export loses nothing):
+#   * Only the level-2 headings assemble_readme() writes (rb_sections) split the
+#     file into sections; a "## ..." or "---" line typed inside a free-text
+#     field stays part of that field. Only the generated footer is dropped.
+#   * A data file's description runs until one of the generated labels
+#     (**Date collected:**, **Location:**, **Sheets:**, **Dimensions:**,
+#     **Variables:**), so a description may itself start with bold text.
+#   * Script descriptions keep their line breaks.
+#   * The "\<" escapes added by assemble_readme() are undone first.
+#
 # Tolerances baked in (so older / hand-tweaked READMEs still import):
 #   * Funders section may be "## Funding" or "## Funders".
 #   * Licence lines may be "- **Code:** licensed under X." or
@@ -526,21 +657,61 @@ extract_packages <- function(folder) {
 #     "This work is licensed under X" (-> code slot).
 #   * Variable-table cells may contain unescaped "|" (older output): extra
 #     cells are folded back into the trailing Summary column.
+#   * Package tables with or without the Source column.
 #   * Avoids `%||%` on multi-element vectors (it uses `&&`, which errors on
 #     length-> 1 logicals in R >= 4.3).
 
+# Level-2 headings written by assemble_readme() (plus older aliases).
+rb_sections <- c("Description", "Abstract", "Instructions", "Authors",
+                 "Affiliations", "Contact", "Funding", "Funders",
+                 "Acknowledgements", "Citation", "License", "Licence",
+                 "Additional information", "Directory Structure",
+                 "Directory map", "Directory Map", "Data Files", "Other Files",
+                 "Models", "Code", "R Environment", "R environment")
+
+rb_footer      <- "^\\*README generated with READMEBuilder"
+rb_file_labels <- "^\\*\\*(Date collected|Location|Sheets|Dimensions|Variables):\\*\\*"
+
+# TRUE if `text` looks like a README this app wrote (it has the footer, or at
+# least two of the app's own section headings plus a "# " title).
+is_readmebuilder <- function(text) {
+  lines <- str_split(text %||% "", "\r?\n")[[1]]
+  if (any(str_detect(lines, rb_footer))) return(TRUE)
+  heads <- str_trim(str_remove(lines[str_detect(lines, "^##\\s")], "^##\\s+"))
+  any(str_detect(lines, "^#\\s+\\S")) && sum(unique(heads) %in% rb_sections) >= 2
+}
+
 parse_readme <- function(text) {
-  lines <- str_split(text, "\r?\n")[[1]]
+  lines <- md_unescape_html(str_split(text, "\r?\n")[[1]])
+
+  # Drop the generated footer ("---" then "*README generated ...*") so it never
+  # leaks into the last section. A "---" typed by the user is kept.
+  ft <- which(str_detect(lines, rb_footer))
+  if (length(ft)) {
+    ft  <- ft[length(ft)]
+    cut <- ft
+    hr  <- which(str_detect(lines[seq_len(ft - 1)], "^---\\s*$"))
+    if (length(hr)) {
+      h <- hr[length(hr)]
+      gap <- if (ft - h > 1) lines[(h + 1):(ft - 1)] else character(0)
+      if (!any(nzchar(str_trim(gap)))) cut <- h
+    }
+    lines <- head(lines, cut - 1)
+  }
 
   h1    <- which(str_detect(lines, "^#\\s+"))
   title <- if (length(h1)) str_trim(str_remove(lines[h1[1]], "^#\\s+")) else ""
 
-  # DOIs come from the badge line(s) only -- everything above the first "##"
-  # heading. Scanning the whole file would also pick up DOIs quoted in the
-  # citation, additional information or model notes, and each import/export
-  # cycle would then add them as extra badges.
-  first_h2 <- which(str_detect(lines, "^##\\s"))[1]
-  header   <- if (is.na(first_h2)) lines else head(lines, first_h2 - 1)
+  sec_pat <- paste0("^##\\s+(",
+                    paste(str_replace_all(rb_sections, " ", "\\\\s+"), collapse = "|"),
+                    ")\\s*$")
+  h2 <- which(str_detect(lines, sec_pat))
+
+  # DOIs come from the badge line(s) only -- everything above the first
+  # section heading. Scanning the whole file would also pick up DOIs quoted in
+  # the citation, additional information or model notes, and each
+  # import/export cycle would then add them as extra badges.
+  header <- if (!length(h2)) lines else head(lines, h2[1] - 1)
   m   <- str_match_all(paste(header, collapse = "\n"),
                        "\\]\\(https?://(?:dx\\.)?doi\\.org/([^)\\s]+)\\)")[[1]]
   doi <- if (nrow(m) > 0) {
@@ -548,19 +719,15 @@ parse_readme <- function(text) {
     paste(d, collapse = "; ")
   } else ""
 
-  # Map each level-2 heading to its body lines (excluding ### headings),
-  # stopping each body at a horizontal rule so the footer never leaks in.
-  h2  <- which(str_detect(lines, "^##\\s+") & !str_detect(lines, "^###"))
+  # Map each known level-2 heading to its body lines.
   sec <- list()
   if (length(h2)) {
     for (j in seq_along(h2)) {
       start <- h2[j]
       end   <- if (j < length(h2)) h2[j + 1] - 1 else length(lines)
-      nm    <- str_trim(str_remove(lines[start], "^##\\s+"))
+      nm    <- str_squish(str_remove(lines[start], "^##\\s+"))
       body  <- if (end > start) lines[(start + 1):end] else character(0)
-      hr <- which(str_detect(body, "^---\\s*$"))
-      if (length(hr)) body <- if (hr[1] > 1) body[seq_len(hr[1] - 1)] else character(0)
-      sec[[nm]] <- body
+      if (is.null(sec[[nm]])) sec[[nm]] <- body
     }
   }
 
@@ -637,7 +804,8 @@ parse_readme <- function(text) {
     parts <- str_split(str_trim(row), "(?<!\\\\)\\|")[[1]]
     if (length(parts) && !nzchar(str_trim(parts[1])))             parts <- parts[-1]
     if (length(parts) && !nzchar(str_trim(parts[length(parts)]))) parts <- parts[-length(parts)]
-    str_replace_all(str_trim(parts), fixed("\\|"), "|")
+    parts <- str_replace_all(str_trim(parts), fixed("\\|"), "|")
+    str_replace_all(parts, fixed("<br>"), "\n")
   }
   split_h3 <- function(body) {
     idx <- which(str_detect(body, "^###\\s+`.+`"))
@@ -657,34 +825,39 @@ parse_readme <- function(text) {
 
   for (it in split_h3(sec_body("Data Files"))) {
     p <- it$path; bl <- it$lines
-    desc <- character(0)
-    for (l in bl) {
-      s <- str_trim(l)
-      if (str_detect(s, "^\\*\\*") || str_detect(s, "^\\|")) break
-      if (nzchar(s)) desc <- c(desc, s)
-    }
-    if (length(desc)) file_desc[[p]] <- paste(desc, collapse = "\n")
 
-    dline <- bl[str_detect(bl, "\\*\\*Date collected:\\*\\*")]
+    # Description = everything before the first generated label.
+    lab  <- which(str_detect(bl, rb_file_labels))
+    desc <- trim_blanks(if (length(lab)) bl[seq_len(lab[1] - 1)] else bl)
+    if (length(desc)) file_desc[[p]] <- paste(desc, collapse = "\n")
+    info <- if (length(lab)) bl[lab[1]:length(bl)] else character(0)
+
+    dline <- info[str_detect(info, "^\\*\\*Date collected:\\*\\*")]
     if (length(dline)) {
       d1 <- str_match(dline[1],
-        "\\*\\*Date collected:\\*\\*\\s*(.+?)(?:\\s*\\|\\s*\\*\\*Location:\\*\\*\\s*(.+))?$")
+        "^\\*\\*Date collected:\\*\\*\\s*(.+?)(?:\\s*\\|\\s*\\*\\*Location:\\*\\*\\s*(.+))?$")
       if (!is.na(d1[1, 2])) dates[[p]] <- str_trim(d1[1, 2])
       if (!is.na(d1[1, 3])) locs[[p]]  <- str_trim(d1[1, 3])
     }
-    lline <- bl[str_detect(bl, "\\*\\*Location:\\*\\*") &
-                !str_detect(bl, "\\*\\*Date collected:\\*\\*")]
+    lline <- info[str_detect(info, "^\\*\\*Location:\\*\\*")]
     if (length(lline) && is.null(locs[[p]])) {
-      l1 <- str_match(lline[1], "\\*\\*Location:\\*\\*\\s*(.+)$")
+      l1 <- str_match(lline[1], "^\\*\\*Location:\\*\\*\\s*(.+)$")
       if (!is.na(l1[1, 2])) locs[[p]] <- str_trim(l1[1, 2])
     }
 
-    dim <- str_match(paste(bl, collapse = "\n"),
+    sline  <- info[str_detect(info, "^\\*\\*Sheets:\\*\\*")]
+    sheets <- if (length(sline)) str_match_all(sline[1], "`([^`]+)`")[[1]][, 2] else character(0)
+
+    dim <- str_match(paste(info, collapse = "\n"),
       "\\*\\*Dimensions:\\*\\*\\s*([0-9]+)\\s*rows\\s*[×x]\\s*([0-9]+)\\s*columns")
     nrw <- if (!is.na(dim[1, 2])) as.integer(dim[1, 2]) else NA_integer_
     ncl <- if (!is.na(dim[1, 3])) as.integer(dim[1, 3]) else NA_integer_
 
-    rows <- bl[str_detect(bl, "^\\s*\\|")]
+    # Variable rows: table lines after **Variables:** only, so a table the
+    # user put in the description is never read as column metadata.
+    vl   <- which(str_detect(info, "^\\*\\*Variables:\\*\\*"))
+    rows <- if (length(vl) && vl[1] < length(info)) info[(vl[1] + 1):length(info)] else character(0)
+    rows <- rows[str_detect(rows, "^\\s*\\|")]
     rows <- rows[!str_detect(rows, "^\\s*\\|\\s*:?-{2,}")]
     rows <- rows[!str_detect(rows, "Column\\s*\\|\\s*Type")]
     cols <- list(); cd <- list(); un <- list()
@@ -698,13 +871,14 @@ parse_readme <- function(text) {
       if (nzchar(dsc)) cd[[nmc]] <- dsc
       if (nzchar(unt)) un[[nmc]] <- unt
     }
-    if (length(cols)) auto_by_path[[p]] <- list(nrow = nrw, ncol = ncl, cols = cols)
+    if (length(cols))
+      auto_by_path[[p]] <- list(nrow = nrw, ncol = ncl, cols = cols, sheets = sheets)
     if (length(cd)) col_desc[[p]] <- cd
     if (length(un)) units[[p]] <- un
   }
 
   for (it in split_h3(sec_body("Other Files"))) {
-    bl <- str_trim(it$lines); bl <- bl[nzchar(bl)]
+    bl <- trim_blanks(it$lines)
     if (length(bl)) file_desc[[it$path]] <- paste(bl, collapse = "\n")
   }
 
@@ -725,28 +899,39 @@ parse_readme <- function(text) {
   }
 
   # ── Code / scripts (run order + descriptions) ───────────────────────────────
-  script_paths <- character(0); script_desc <- list(); cur <- NULL
+  # Items are "1. **`path`**" at the start of a line; the description lines
+  # under each are indented by three spaces, which are removed again here.
+  script_paths <- character(0); script_lines <- list(); cur <- NULL
   for (l in sec_body("Code")) {
-    mm <- str_match(l, "^\\s*\\d+\\.\\s+\\*\\*`(.+?)`\\*\\*")
+    mm <- str_match(l, "^\\d+\\.\\s+\\*\\*`(.+?)`\\*\\*\\s*$")
     if (!is.na(mm[1, 2])) {
       cur <- mm[1, 2]; script_paths <- c(script_paths, cur)
-    } else if (!is.null(cur) && nzchar(str_trim(l))) {
-      add  <- str_trim(l)
-      prev <- script_desc[[cur]]
-      script_desc[[cur]] <- if (is.null(prev) || !nzchar(prev)) add else paste(prev, add)
+      script_lines[[cur]] <- ""
+    } else if (!is.null(cur)) {
+      script_lines[[cur]] <- c(script_lines[[cur]], l)
     }
+  }
+  script_desc <- list()
+  for (sp in names(script_lines)) {
+    d <- trim_blanks(str_remove(script_lines[[sp]], "^   "))
+    if (length(d)) script_desc[[sp]] <- paste(d, collapse = "\n")
   }
 
   # ── R environment (version + package table) ─────────────────────────────────
   renv <- sec_body("R Environment", "R environment")
-  rvm  <- str_match(paste(renv, collapse = "\n"), "\\*\\*R version:\\*\\*\\s*([0-9.]+)")
-  r_version <- if (!is.na(rvm[1, 2])) rvm[1, 2] else ""
-  pk_pkg <- character(0); pk_ver <- character(0)
+  rvm  <- str_match(paste(renv, collapse = "\n"),
+                    "\\*\\*R version:\\*\\*\\s*([0-9.]+)(?:\\s*\\(from ([^)\n]+)\\))?")
+  r_version     <- if (!is.na(rvm[1, 2])) rvm[1, 2] else ""
+  r_version_src <- if (!is.na(rvm[1, 3])) str_trim(rvm[1, 3]) else ""
+  pk_pkg <- character(0); pk_ver <- character(0); pk_src <- character(0)
   for (l in renv) {
-    mm <- str_match(l, "^\\|\\s*`(.+?)`\\s*\\|\\s*(.+?)\\s*\\|")
-    if (!is.na(mm[1, 2])) { pk_pkg <- c(pk_pkg, mm[1, 2]); pk_ver <- c(pk_ver, str_trim(mm[1, 3])) }
+    mm <- str_match(l, "^\\|\\s*`(.+?)`\\s*\\|\\s*(.+?)\\s*\\|(?:\\s*(.*?)\\s*\\|)?\\s*$")
+    if (!is.na(mm[1, 2])) {
+      pk_pkg <- c(pk_pkg, mm[1, 2]); pk_ver <- c(pk_ver, str_trim(mm[1, 3]))
+      pk_src <- c(pk_src, if (is.na(mm[1, 4])) "" else mm[1, 4])
+    }
   }
-  pkgs <- tibble(Package = pk_pkg, Version = pk_ver)
+  pkgs <- tibble(Package = pk_pkg, Version = pk_ver, Source = pk_src)
 
   auto <- map(files, function(p) if (!is.null(auto_by_path[[p]])) auto_by_path[[p]] else NULL)
   script_order <- match(script_paths, files)
@@ -755,7 +940,7 @@ parse_readme <- function(text) {
   list(
     meta = meta, root_name = root_name, files = files, auto = auto,
     script_order = script_order, script_desc = script_desc,
-    pkgs = pkgs, r_version = r_version,
+    pkgs = pkgs, r_version = r_version, r_version_src = r_version_src,
     file_desc = file_desc, col_desc = col_desc, units = units,
     dates = dates, locs = locs, models = models
   )
@@ -767,17 +952,24 @@ parse_readme <- function(text) {
 assemble_readme <- function(meta, files, descriptions, auto, pkgs,
                             script_order, script_descs, units_list,
                             col_descs, file_extras, root = "project",
-                            r_version = NULL, models = NULL) {
+                            r_version = NULL, models = NULL,
+                            r_version_src = NULL) {
   md   <- character(0)
   push <- function(...) md <<- c(md, c(...), "")
 
-  # Escape a markdown table cell: collapse newlines and escape "|" so a value
-  # containing pipes (every auto-summary does) cannot break the table layout.
+  # Escape a markdown table cell: write line breaks as <br> (GitHub renders
+  # them inside tables; parse_readme() turns them back into newlines) and
+  # escape "|" so a value containing pipes (every auto-summary does) cannot
+  # break the table layout.
   esc_cell <- function(x) {
     x <- x %||% ""
-    x <- str_replace_all(x, "[\r\n]+", " ")
+    x <- str_replace_all(x, "\r?\n", "<br>")
     str_replace_all(x, fixed("|"), "\\|")
   }
+
+  # One bullet per non-empty line; a bullet the user typed is not doubled.
+  bullets <- function(x)
+    paste0("- ", keep(strip_bullet(str_trim(str_split(x, "\r?\n")[[1]])), nzchar))
 
   push(paste0("# ", meta$title %||% "Untitled Project"))
 
@@ -801,21 +993,12 @@ assemble_readme <- function(meta, files, descriptions, auto, pkgs,
   if (nzchar(meta$abstract     %||% "")) push("## Abstract",     meta$abstract)
   if (nzchar(meta$instructions %||% "")) push("## Instructions", meta$instructions)
 
-  if (nzchar(meta$authors %||% "")) {
-    lines <- keep(str_trim(str_split(meta$authors, "\n")[[1]]), nzchar)
-    push("## Authors", paste0("- ", lines))
-  }
-  if (nzchar(meta$affiliation %||% "")) {
-    lines <- keep(str_trim(str_split(meta$affiliation, "\n")[[1]]), nzchar)
-    push("## Affiliations", paste0("- ", lines))
-  }
+  if (nzchar(meta$authors %||% ""))     push("## Authors",      bullets(meta$authors))
+  if (nzchar(meta$affiliation %||% "")) push("## Affiliations", bullets(meta$affiliation))
   if (nzchar(meta$contact %||% ""))
     push("## Contact", paste0("\U0001F4E7 ", meta$contact))
 
-  if (nzchar(meta$funders %||% "")) {
-    lines <- keep(str_trim(str_split(meta$funders, "\n")[[1]]), nzchar)
-    push("## Funding", paste0("- ", lines))
-  }
+  if (nzchar(meta$funders %||% ""))     push("## Funding",      bullets(meta$funders))
   if (nzchar(meta$acknowledgements %||% ""))
     push("## Acknowledgements", meta$acknowledgements)
 
@@ -848,8 +1031,9 @@ assemble_readme <- function(meta, files, descriptions, auto, pkgs,
          "```")
   }
 
-  # Data files
-  data_idx <- which(is_tabular(files))
+  # Data files (tabular files; a .txt only if it was read as a table)
+  is_data  <- is_data_file(files, auto)
+  data_idx <- which(is_data)
   if (length(data_idx) > 0) {
     push("## Data Files")
     for (i in data_idx) {
@@ -862,6 +1046,10 @@ assemble_readme <- function(meta, files, descriptions, auto, pkgs,
       if (nzchar(fe$loc  %||% "")) meta_parts <- c(meta_parts, paste0("**Location:** ", fe$loc))
       if (length(meta_parts)) md <- c(md, "", paste(meta_parts, collapse = " | "))
       if (!is.null(a)) {
+        if (length(a$sheets) > 1)
+          md <- c(md, "", paste0("**Sheets:** ", length(a$sheets), " (",
+                                 paste0("`", a$sheets, "`", collapse = ", "),
+                                 "); only the first sheet is summarised below."))
         md <- c(md, "",
                 paste0("**Dimensions:** ", a$nrow, " rows × ", a$ncol, " columns"),
                 "", "**Variables:**", "",
@@ -880,7 +1068,7 @@ assemble_readme <- function(meta, files, descriptions, auto, pkgs,
   }
 
   # Other files
-  other_idx <- which(!is_tabular(files) & !is_script(files))
+  other_idx <- which(!is_data & !is_script(files))
   if (length(other_idx) > 0) {
     push("## Other Files")
     for (i in other_idx) {
@@ -915,29 +1103,50 @@ assemble_readme <- function(meta, files, descriptions, auto, pkgs,
     md <- c(md, "")
   }
 
-  # Scripts
+  # Scripts. Every line of a description is indented three spaces so it stays
+  # inside its numbered item (and multi-line descriptions import intact).
   if (length(script_order) > 0) {
-    push("## Code", "Scripts should be run in the following order:", "")
+    push("## Code", "Scripts should be run in the following order:")
     for (k in seq_along(script_order)) {
       desc <- script_descs[[k]] %||% ""
       md   <- c(md, paste0(k, ". **`", files[script_order[k]], "`**"))
-      if (nzchar(desc)) md <- c(md, "   ", paste0("   ", desc))
+      if (nzchar(desc)) {
+        dl <- str_split(desc, "\r?\n")[[1]]
+        md <- c(md, "", ifelse(nzchar(str_trim(dl)), paste0("   ", dl), ""))
+      }
       md <- c(md, "")
     }
   }
 
-  # R environment
-  r_ver <- r_version %||% paste0(R.version$major, ".", R.version$minor)
+  # R environment. The Source column says where each version came from
+  # (renv.lock, or whatever was installed when the README was generated).
+  r_ver  <- r_version %||% paste0(R.version$major, ".", R.version$minor)
+  r_line <- paste0("**R version:** ", r_ver,
+                   if (!is.null(r_version) && nzchar(r_version_src %||% ""))
+                     paste0(" (from ", r_version_src, ")"))
   if (!is.null(pkgs) && nrow(pkgs) > 0) {
-    push("## R Environment",
-         paste0("**R version:** ", r_ver), "",
-         "| Package | Version |", "| :------ | :------ |",
-         paste0("| `", pkgs$Package, "` | ", pkgs$Version, " |"))
+    src <- if ("Source" %in% names(pkgs)) pkgs$Source else rep("", nrow(pkgs))
+    src[is.na(src)] <- ""
+    if (any(nzchar(src))) {
+      note <- if (any(src == "renv.lock") && any(src != "renv.lock"))
+        c("", paste0("Packages with source *installed* are not recorded in renv.lock; ",
+                     "their versions are those installed where this README was generated."))
+      push("## R Environment", r_line, note, "",
+           "| Package | Version | Source |", "| :------ | :------ | :----- |",
+           paste0("| `", pkgs$Package, "` | ", pkgs$Version, " | ", src, " |"))
+    } else {
+      push("## R Environment", r_line, "",
+           "| Package | Version |", "| :------ | :------ |",
+           paste0("| `", pkgs$Package, "` | ", pkgs$Version, " |"))
+    }
   } else {
-    push("## R Environment", paste0("**R version:** ", r_ver))
+    push("## R Environment", r_line)
   }
 
   push("---", paste0("*README generated with READMEBuilder on ",
                       format(Sys.Date(), "%d %B %Y"), ".*"))
-  paste(md, collapse = "\n")
+  # Escape line by line (multi-line fields are single elements of `md`), so
+  # fenced code blocks inside a user's text are recognised and left alone.
+  md <- str_split(paste(md, collapse = "\n"), "\n")[[1]]
+  paste(md_escape_html(md), collapse = "\n")
 }

@@ -75,15 +75,22 @@ shown in the left-hand navigation:
 2. **Files:** browse to your project folder. A directory map of the folder is
    shown and included in the export. Tabular files are described automatically
    (see [What gets auto-detected](#what-gets-auto-detected)); add a description
-   and a unit for each column, plus the date(s) and location of data collection.
+   for each column (and units for numeric columns), plus the date(s) and
+   location of data collection.
 3. **Script Order:** reorder your code with the up/down arrows to record the
    sequence it should be run in, and add a short description of what each script
    does.  
 4. **R Packages:** scans every R script (`.R`, `.Rmd`, `.qmd`, `.Rnw`) for
-   `library()`, `require()`, `requireNamespace()`, `pacman::p_load()`, and
-   `pkg::fun` calls, then resolves each package's version. If the folder contains
-   an `renv.lock`, the versions (and R version) recorded there are used in
-   preference to what is installed.  
+   `library()`, `require()`, `requireNamespace()`, `pacman::p_load()`,
+   `librarian::shelf()`, `import::from()`, `groundhog.library()` and `pkg::fun`
+   calls, then resolves each package's version (base R packages such as `stats`
+   and `utils` are left out). Only R code is
+   scanned: comments, text inside strings, and the prose of R Markdown / Quarto
+   documents (outside code chunks) are ignored, as are calls such as
+   `library(pkg, character.only = TRUE)` where the package name is a variable.
+   If the folder contains an `renv.lock`, the versions (and R version) recorded
+   there are used in preference to what is installed; a **Source** column in the
+   package table says where each version came from.  
 5. **Models (optional):** record each analysis and where it lives — see
    [Recording models (MLast)](#recording-models-mlast). Leave this tab empty and
    no Models section is added.
@@ -109,8 +116,16 @@ Each column in a tabular file gets an automatic summary:
 | Date / datetime | min–max range and `NA`s |
 | Logical | counts of `TRUE`, `FALSE`, and `NA` |
 
-Files that look tabular by extension but do not parse cleanly (for example a
-prose `.txt`) are quietly skipped and offered as free-text instead.
+Files that look tabular by extension but do not parse cleanly are quietly
+skipped and listed under **Other Files** for a free-text description instead.
+A `.txt` file is only treated as a table if it is tab-delimited, so prose notes
+are not summarised as fake tables.
+
+For Excel workbooks with more than one sheet, the first sheet is summarised and
+the README lists the names of all sheets.
+
+Column names can contain any characters (spaces, brackets, `:`, accents, and so
+on).
 
 ## What the output looks like
 
@@ -125,13 +140,15 @@ MyProject/
 ├── data/
 │   └── data.csv
 ├── analysis.R
-├── report.Rmd
-└── README.md
+├── README.md
+└── report.Rmd
 ````
 
 Each tabular file gets a variable table:
 
 **Dimensions:** 150 rows × 2 columns
+
+**Variables:**
 
 | Column | Type | Description | Units | Summary |
 | :----- | :--- | :---------- | :---- | :------ |
@@ -146,18 +163,25 @@ And the code and environment are recorded so the analysis can be rerun:
 Scripts should be run in the following order:
 
 1. **`analysis.R`**
+
    Load and clean data, fit the model, produce Figure 1.
+
 2. **`report.Rmd`**
+
    Render the results into a report.
 
 ## R Environment
 **R version:** 4.5.2
 
-| Package | Version |
-| :------ | :------ |
-| `dplyr`   | 1.1.4 |
-| `ggplot2` | 3.5.1 |
+| Package | Version | Source |
+| :------ | :------ | :----- |
+| `dplyr`   | 1.1.4 | installed |
+| `ggplot2` | 3.5.1 | installed |
 ````
+
+The **Source** column reads `renv.lock` for versions taken from the lockfile,
+`installed` for versions installed on the machine that generated the README, or
+`not installed`. If a project mixes the two, a note under the table says so.
 
 If you fill in the optional **Models** tab, a models table is included too:
 
@@ -206,7 +230,9 @@ distinct, and a third field records the code:
 Rather than typing line numbers by hand (they go stale as soon as a script is
 edited), **Suggest from loaded scripts** searches the scripts in your loaded
 project folder for the outcome or first predictor and offers each match as a
-`script:line` option with a preview of the line. Load a project folder on the
+`script:line` option with a preview of the line. Scripts in subfolders are given
+by their path within the project (for example `analysis/sem.R:3`), so scripts
+with the same name in different folders can be told apart. Load a project folder on the
 **Files** tab first.
 
 The result is written to the README as a `## Models` table, and is restored when
@@ -244,6 +270,14 @@ per-column descriptions and units, the script run order and descriptions, any
 recorded models, and the R / package versions) so you can edit and re-export
 *without* needing the original data folder. **Clear** resets everything to a blank README.
 
+Exporting a README and importing it again gives back exactly what you entered,
+including multi-line descriptions and text containing Markdown headings, `---`,
+or `<...>`. (Text in angle brackets is escaped as `\<...>` in the export, so
+GitHub shows it rather than treating it as an HTML tag.)
+
+If the file you upload does not look like a README made by READMEBuilder, the
+app asks before replacing anything you have already entered.
+
 The importer is deliberately tolerant of older or hand-edited files (for example
 a `## Funders` or `## Funding` heading, and single- or split-licence wording).
 File-level content is reconstructed from the README itself; to refresh the
@@ -267,7 +301,8 @@ and simply uses your system font.
 READMEBuilder depends on the following R packages, installed automatically with
 the command above:
 
-`shiny`, `bslib`, `tidyverse`, `readxl`, `stringr`, `purrr`, `shinyFiles` and `fs`.
+`shiny`, `bslib`, `shinyFiles`, `dplyr`, `readr`, `readxl`, `stringr`, `purrr`
+and `fs`.
 `jsonlite` is optional: it is used to read `renv.lock`, and the lockfile step is
 skipped if it is not installed. Install it with `install.packages("jsonlite")`.
 

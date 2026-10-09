@@ -19,6 +19,7 @@ server <- function(input, output, session) {
     pkgs         = NULL,
     pkg_diag     = NULL,
     r_version    = NULL,          # imported / lockfile R version (NULL -> live R.version)
+    r_version_src = NULL,         # where r_version came from, e.g. "renv.lock"
     models       = mlast_template(),  # optional MLast-style model location table
     import_msg   = NULL,
     # imported defaults for the dynamic per-file / per-script inputs (keyed by path)
@@ -46,19 +47,42 @@ server <- function(input, output, session) {
   })
 
   # ── Import an existing README ────────────────────────────────────────────────
-  run_import <- function() {
+  # A file that does not look like a READMEBuilder README (no generated footer
+  # or section headings) is NOT imported straight away, because importing
+  # replaces the whole form: the user is asked first. If even a forced import
+  # finds nothing usable, the form is left untouched.
+  run_import <- function(force = FALSE) {
     if (is.null(input$import_md)) {
       showNotification("Choose a README.md first.", type = "warning"); return()
     }
     txt <- tryCatch(readr::read_file(input$import_md$datapath), error = function(e) NULL)
-    if (is.null(txt) || !nzchar(txt)) {
-      showNotification("Could not read that file.", type = "error"); return()
+    if (is.null(txt) || !nzchar(txt) || !validUTF8(txt)) {
+      showNotification("Could not read that file (empty, or not a UTF-8 text file).",
+                       type = "error"); return()
+    }
+    if (!force && !is_readmebuilder(txt)) {
+      showModal(modalDialog(
+        title = tagList(icon("triangle-exclamation"), " Not a READMEBuilder README?"),
+        p(code(input$import_md$name), " does not look like a README made by ",
+          "READMEBuilder, so little or nothing may be read from it."),
+        p(strong("Importing replaces everything currently in the form.")),
+        footer = tagList(
+          modalButton("Cancel"),
+          actionButton("import_anyway", "Import anyway", class = "btn-warning")
+        )
+      ))
+      return()
     }
     p <- tryCatch(parse_readme(txt), error = function(e) NULL)
     if (is.null(p)) {
       showNotification("Could not parse that README.", type = "error"); return()
     }
     m <- p$meta
+    if (!length(p$files) && !any(nzchar(unlist(m))) && !nrow(p$models) && !nrow(p$pkgs)) {
+      showNotification("Nothing recognisable was found in that file; the form was left unchanged.",
+                       type = "warning", duration = 8)
+      return()
+    }
 
     # Project-info fields
     updateTextInput(session,     "title",           value = m$title)
@@ -91,6 +115,7 @@ server <- function(input, output, session) {
     rv$root_name    <- if (nzchar(p$root_name)) p$root_name else NULL
     rv$folder       <- NULL
     rv$r_version    <- if (nzchar(p$r_version)) p$r_version else NULL
+    rv$r_version_src <- if (nzchar(p$r_version_src)) p$r_version_src else NULL
 
     rv$imp_desc       <- p$file_desc
     rv$imp_coldesc    <- p$col_desc
@@ -110,18 +135,17 @@ server <- function(input, output, session) {
       rv$pkgs <- NULL; rv$pkg_diag <- NULL
     }
 
-    rv$import_msg <- sprintf(
-      "Imported %d file%s, %d script%s, %d package%s%s.",
-      length(p$files), if (length(p$files) == 1) "" else "s",
-      length(rv$script_order), if (length(rv$script_order) == 1) "" else "s",
-      if (is.null(rv$pkgs)) 0L else nrow(rv$pkgs),
-      if (is.null(rv$pkgs) || nrow(rv$pkgs) == 0) "" else "s",
-      if (!is.null(rv$r_version)) paste0(", R ", rv$r_version) else "")
+    rv$import_msg <- paste0(
+      "Imported ", plural(length(p$files), "file"), ", ",
+      plural(length(rv$script_order), "script"), ", ",
+      plural(if (is.null(rv$pkgs)) 0L else nrow(rv$pkgs), "package"),
+      if (!is.null(rv$r_version)) paste0(", R ", rv$r_version) else "", ".")
     showNotification(rv$import_msg, type = "message", duration = 6)
   }
 
   observeEvent(input$import_md,    run_import())      # auto-import on upload
   observeEvent(input$reimport_btn, run_import())      # re-run on demand
+  observeEvent(input$import_anyway, { removeModal(); run_import(force = TRUE) })
 
   observeEvent(input$clear_import, {
     # title and contact are textInputs; the rest are textAreaInputs.
@@ -136,7 +160,7 @@ server <- function(input, output, session) {
                          options = list(create = TRUE))
     rv$files <- character(0); rv$auto <- list()
     rv$script_idx <- integer(0); rv$script_order <- integer(0)
-    rv$pkgs <- NULL; rv$pkg_diag <- NULL; rv$r_version <- NULL
+    rv$pkgs <- NULL; rv$pkg_diag <- NULL; rv$r_version <- NULL; rv$r_version_src <- NULL
     rv$root_name <- NULL; rv$folder <- NULL; rv$import_msg <- NULL
     rv$imp_desc <- list(); rv$imp_coldesc <- list(); rv$imp_units <- list()
     rv$imp_date <- list(); rv$imp_loc <- list(); rv$imp_scriptdesc <- list()
@@ -242,7 +266,7 @@ server <- function(input, output, session) {
     # Skip installed dependency libraries (renv/packrat) and IDE/VCS state:
     # these are not the researcher's own data or code, and a restored renv
     # library can hold tens of thousands of files.
-    files <- files[!is_excluded(files)]
+    files <- tree_order(files[!is_excluded(files)])
     if (!length(files)) {
       showNotification("No files found in that folder.", type = "warning"); return()
     }
@@ -253,13 +277,14 @@ server <- function(input, output, session) {
     rv$script_order <- rv$script_idx
     rv$root_name    <- basename(rv$folder)
     rv$r_version    <- NULL                  # use live R.version until a scan finds a lockfile
+    rv$r_version_src <- NULL
 
     # A fresh folder supersedes any imported defaults / packages.
     rv$pkgs <- NULL; rv$pkg_diag <- NULL; rv$import_msg <- NULL
     rv$imp_desc <- list(); rv$imp_coldesc <- list(); rv$imp_units <- list()
     rv$imp_date <- list(); rv$imp_loc <- list(); rv$imp_scriptdesc <- list()
 
-    showNotification(paste0(length(files), " files loaded."), type = "message")
+    showNotification(paste0(plural(length(files), "file"), " loaded."), type = "message")
   })
 
   output$folder_label <- renderUI({
@@ -270,9 +295,9 @@ server <- function(input, output, session) {
   output$file_summary_ui <- renderUI({
     req(length(rv$files) > 0)
     tagList(hr(), tags$small(class = "text-muted",
-      icon("file"),  " ", length(rv$files), " files total", br(),
+      icon("file"),  " ", plural(length(rv$files), "file"), " total", br(),
       icon("table"), " ", sum(map_lgl(rv$auto, Negate(is.null))), " tabular", br(),
-      icon("code"),  " ", length(rv$script_idx), " scripts"))
+      icon("code"),  " ", plural(length(rv$script_idx), "script")))
   })
 
   # ── Directory map (live preview) ──────────────────────────────────────────────
@@ -306,9 +331,13 @@ server <- function(input, output, session) {
         tags$span(class = "badge bg-info ms-2", icon("code"), " script")
 
       units_ui <- if (!is.null(a)) {
-        col_rows <- map(a$cols, function(col_d) {
+        # Input IDs use the column's POSITION (j), never its name: Shiny reads
+        # "id:type" as an input-handler type, so a column such as "time:s"
+        # would otherwise crash the session, and names may hold any character.
+        col_rows <- map(seq_along(a$cols), function(j) {
+          col_d <- a$cols[[j]]
           unit_cell <- if (col_d$type == "numeric")
-            textInput(paste0("unit_", i, "_", col_d$name), label = NULL,
+            textInput(paste0("unit_", i, "_", j), label = NULL,
                       value = imp_get2(rv$imp_units, f, col_d$name),
                       placeholder = "e.g. mm, g, °C")
           else
@@ -323,7 +352,7 @@ server <- function(input, output, session) {
             tags$td(style = "width:25%;vertical-align:middle;padding:4px 6px",
                     tags$small(class = "text-muted", col_d$summary)),
             tags$td(style = "width:38%;vertical-align:middle;padding:3px 4px",
-                    textInput(paste0("coldesc_", i, "_", col_d$name), label = NULL,
+                    textInput(paste0("coldesc_", i, "_", j), label = NULL,
                               value = imp_get2(rv$imp_coldesc, f, col_d$name),
                               placeholder = "Column description")),
             tags$td(style = "width:15%;vertical-align:middle;padding:3px 4px", unit_cell)
@@ -334,6 +363,10 @@ server <- function(input, output, session) {
           tags$p(class = "text-muted small mb-1",
                  icon("table"), " ", a$nrow, " rows × ", a$ncol,
                  " cols — add a description for each column; units for numeric columns:"),
+          if (length(a$sheets) > 1)
+            tags$p(class = "text-muted small mb-1", icon("layer-group"), " ",
+                   length(a$sheets), " sheets (", paste(a$sheets, collapse = ", "),
+                   "); only the first, ", code(a$sheets[1]), ", is summarised."),
           tags$table(class = "table table-sm table-bordered small mb-0",
             tags$thead(class = "table-light",
               tags$tr(tags$th("Column"), tags$th("Auto-summary"),
@@ -428,14 +461,26 @@ server <- function(input, output, session) {
 
   # ── Package scan ──────────────────────────────────────────────────────────────
   observeEvent(input$scan_pkgs, {
-    req(rv$folder)
+    # After an import there is no folder to scan: say so instead of silently
+    # doing nothing, and keep the imported package table.
+    if (is.null(rv$folder) || !nzchar(rv$folder)) {
+      showNotification(
+        if (!is.null(rv$pkgs) && nrow(rv$pkgs) > 0)
+          paste("The package list shown was imported from the README. To rescan,",
+                "load the project folder on the Files tab.")
+        else "Load a project folder on the Files tab first, then scan.",
+        type = "warning", duration = 8)
+      return()
+    }
     result <- tryCatch(extract_packages(rv$folder),
       error = function(e) { showNotification(paste("Error:", e$message), type = "error"); NULL })
     if (!is.null(result)) {
       rv$pkgs     <- result$pkgs
       rv$pkg_diag <- result
       # If an renv.lock recorded an R version, adopt it for the export.
-      if (!is.na(result$lock_r_version)) rv$r_version <- result$lock_r_version
+      if (!is.na(result$lock_r_version)) {
+        rv$r_version <- result$lock_r_version; rv$r_version_src <- "renv.lock"
+      }
     }
   })
 
@@ -491,6 +536,7 @@ server <- function(input, output, session) {
     updateTextInput(session,     "model_outcome_paper", value = "")
     updateTextInput(session,     "model_outcome_data",  value = "")
     updateTextInput(session,     "model_predictors",    value = "")
+    updateSelectizeInput(session, "model_test_type",    selected = "")
     updateTextInput(session,     "model_methods_loc",   value = "")
     updateTextInput(session,     "model_results_loc",   value = "")
     updateTextInput(session,     "model_code_loc",      value = "")
@@ -594,9 +640,10 @@ server <- function(input, output, session) {
     map(seq_along(rv$files), function(i) {
       a <- rv$auto[[i]]; if (is.null(a)) return(list())
       units <- list()
-      for (col_d in a$cols) {
+      for (j in seq_along(a$cols)) {
+        col_d <- a$cols[[j]]
         if (col_d$type != "numeric") next
-        val <- input[[paste0("unit_", i, "_", col_d$name)]]
+        val <- input[[paste0("unit_", i, "_", j)]]
         if (!is.null(val) && nzchar(trimws(val))) units[[col_d$name]] <- val
       }
       units
@@ -607,8 +654,9 @@ server <- function(input, output, session) {
     map(seq_along(rv$files), function(i) {
       a <- rv$auto[[i]]; if (is.null(a)) return(list())
       descs <- list()
-      for (col_d in a$cols) {
-        val <- input[[paste0("coldesc_", i, "_", col_d$name)]]
+      for (j in seq_along(a$cols)) {
+        col_d <- a$cols[[j]]
+        val <- input[[paste0("coldesc_", i, "_", j)]]
         if (!is.null(val) && nzchar(trimws(val))) descs[[col_d$name]] <- val
       }
       descs
@@ -642,7 +690,8 @@ server <- function(input, output, session) {
       file_extras  = get_file_extras(),
       root         = tree_root(),
       r_version    = rv$r_version,
-      models       = rv$models
+      models       = rv$models,
+      r_version_src = rv$r_version_src
     )
   })
 
