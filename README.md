@@ -63,8 +63,8 @@ READMEBuilder is not on CRAN. Install it from GitHub. There are two versions:
 **Stable version** (the `main` branch):
 
 ```r
-install.packages("devtools")
-devtools::install_github("EIvimeyCook/READMEBuilder")
+install.packages("pak")
+pak::pak("EIvimeyCook/READMEBuilder")
 ```
 
 **Development version** (the `development` branch), with the latest features and
@@ -72,7 +72,7 @@ bug fixes ([what's new and
 fixed](https://github.com/EIvimeyCook/READMEBuilder/blob/development/NEWS.md)):
 
 ```r
-devtools::install_github("EIvimeyCook/READMEBuilder", ref = "development")
+pak::pak("EIvimeyCook/READMEBuilder@development")
 ```
 
 To check which version you have, run `packageVersion("READMEBuilder")`: 0.2.0 is
