@@ -10,6 +10,15 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE.md)
 <!-- badges: end -->
 
+> [!IMPORTANT]
+> **A development version with new features and bug fixes is available.** It
+> adds one-click licence choices and a Source column for package versions, plus
+> fixes for DOI badges, re-importing a README, and script descriptions being
+> wiped when scripts are reordered. See [what's new and
+> fixed](https://github.com/EIvimeyCook/READMEBuilder/blob/development/NEWS.md)
+> and [how to install it](#installation). **Found a bug? Please try the
+> development version first, as it may already be fixed.**
+
 READMEBuilder is an R package with an interactive Shiny app that turns a project folder into a single `README.md` documenting both **the data and the code**. 
 
 Good documentation is what makes an analysis reproducible: not just what the data
@@ -47,12 +56,26 @@ share (for example on Zenodo, Dryad, or GitHub).
 
 ## Installation
 
-READMEBuilder is not on CRAN. Install the version from GitHub:
+READMEBuilder is not on CRAN. Install it from GitHub. There are two versions:
+
+**Stable version** (the `main` branch):
 
 ```r
 install.packages("devtools")
 devtools::install_github("EIvimeyCook/READMEBuilder")
 ```
+
+**Development version** (the `development` branch), with the latest features and
+bug fixes ([what's new and
+fixed](https://github.com/EIvimeyCook/READMEBuilder/blob/development/NEWS.md)):
+
+```r
+devtools::install_github("EIvimeyCook/READMEBuilder", ref = "development")
+```
+
+To check which version you have, run `packageVersion("READMEBuilder")`: 0.2.0 is
+the stable version and 0.2.1 the development version. To switch between them,
+run the other install command.
 
 ## Usage
 
@@ -285,6 +308,13 @@ not installed).
 
 Please file issues and feature requests at
 <https://github.com/EIvimeyCook/READMEBuilder/issues>. Pull requests are welcome.
+
+**Before reporting a bug, please install the development version (see
+[Installation](#installation)) and check whether the problem is still there.**
+Many bugs are already fixed on the `development` branch; they are listed in
+[NEWS.md](https://github.com/EIvimeyCook/READMEBuilder/blob/development/NEWS.md).
+When you file an issue, please include the output of
+`packageVersion("READMEBuilder")` and `sessionInfo()`.
 
 ## Citation
 
