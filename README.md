@@ -47,7 +47,7 @@ share (for example on Zenodo, Dryad, or GitHub).
 
 ## Installation
 
-READMEBuilder is not on CRAN. Install the development version from GitHub:
+READMEBuilder is not on CRAN. Install the version from GitHub:
 
 ```r
 install.packages("devtools")
