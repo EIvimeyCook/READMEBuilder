@@ -27,16 +27,57 @@
 #'         download of \code{README.md}.
 #' }
 #'
+#' The Files tab also has a \strong{Use working directory} button, which loads
+#' the folder \code{build_readme()} was called from (\code{getwd()}), so a
+#' project already open in your IDE does not have to be browsed to.
+#'
+#' @param folder Optional path to the project folder to load when the app
+#'   opens: absolute (\code{"~/projects/my-study"}), relative to the working
+#'   directory (\code{"."}, \code{"analysis"}), or built with
+#'   \code{here::here()}. \code{NULL} (the default) opens the app with no folder
+#'   loaded.
+#' @param edit_readme If \code{TRUE}, and the folder contains a
+#'   \code{README.md} made by READMEBuilder, the form is filled in from it
+#'   (project info, file and column descriptions, units, script order and
+#'   descriptions, models, and the recorded R / package versions), while the
+#'   file list and data summaries come from the folder itself. A README not
+#'   made by READMEBuilder is left alone. If \code{folder} is not given, the
+#'   working directory is used.
+#'
 #' @return Launches the Shiny app; does not return a value. Produces a
 #'   \code{README.md} file.
 #'
 #' @examples
 #' \dontrun{
 #' build_readme()
+#'
+#' # Open with a project folder already loaded
+#' build_readme(".")
+#' build_readme("~/projects/my-study")
+#' build_readme(here::here())
+#'
+#' # Load the working directory and carry on editing its README.md
+#' build_readme(edit_readme = TRUE)
 #' }
 #'
 #' @export
-build_readme <- function() {
+build_readme <- function(folder = NULL, edit_readme = FALSE) {
+  if (!is.logical(edit_readme) || length(edit_readme) != 1 || is.na(edit_readme))
+    stop("`edit_readme` must be TRUE or FALSE.", call. = FALSE)
+
+  # runApp() switches the working directory to the app's own folder, so the
+  # caller's working directory (and any relative `folder`) is resolved here.
+  wd <- normalizePath(getwd(), winslash = "/")
+  if (is.null(folder) && edit_readme) folder <- wd
+  if (!is.null(folder)) {
+    if (!is.character(folder) || length(folder) != 1 || is.na(folder) || !nzchar(folder))
+      stop("`folder` must be a single path to a folder.", call. = FALSE)
+    path <- normalizePath(path.expand(folder), winslash = "/", mustWork = FALSE)
+    if (!dir.exists(path))
+      stop("Folder not found: ", folder, call. = FALSE)
+    folder <- path
+  }
+
   app_dir <- system.file("READMEBuilder", package = "READMEBuilder")
   if (!nzchar(app_dir)) {
     stop(
@@ -46,5 +87,10 @@ build_readme <- function() {
       call. = FALSE
     )
   }
+
+  # Read by the app's server; restored when the app closes.
+  op <- options(READMEBuilder.launch = list(wd = wd, folder = folder,
+                                            edit_readme = edit_readme))
+  on.exit(options(op), add = TRUE)
   shiny::runApp(app_dir, display.mode = "normal")
 }

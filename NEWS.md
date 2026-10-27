@@ -5,6 +5,15 @@ Version 0.2.1, on the `development` branch. The stable version on `main` is
 
 ## New features
 
+* `build_readme()` takes a `folder` argument to open the app with a project
+  folder already loaded (absolute, relative to the working directory, or from
+  `here::here()`), and `edit_readme = TRUE` to also fill the form from that
+  folder's `README.md` if READMEBuilder made it.
+* A **Use working directory** button on the Files tab loads the folder
+  `build_readme()` was called from.
+* Loading a folder that already has a READMEBuilder `README.md` offers to load
+  it, keeping the folder's own file list and data summaries.
+
 * One-click licence buttons for the common choices: MIT, Apache 2.0 or GPL-3.0
   for code, and CC0 or CC BY 4.0 for data.
 * The package table has a **Source** column saying where each version came from

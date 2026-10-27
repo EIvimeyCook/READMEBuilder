@@ -9,6 +9,10 @@ server <- function(input, output, session) {
                shinyFiles::getVolumes()())
   shinyDirChoose(input, "folder_btn", roots = volumes, session = session)
 
+  # Set by build_readme(): the caller's working directory, and any folder to
+  # load at start. NULL when the app is run directly with runApp().
+  launch <- getOption("READMEBuilder.launch")
+
   rv <- reactiveValues(
     folder       = NULL,
     root_name    = NULL,
@@ -77,11 +81,19 @@ server <- function(input, output, session) {
     if (is.null(p)) {
       showNotification("Could not parse that README.", type = "error"); return()
     }
+    apply_import(p)
+  }
+
+  # Fills the form from a parsed README. With keep_folder = TRUE (a README found
+  # in the loaded folder) the folder's own file list and data summaries are kept
+  # and the README's descriptions attach to them by path; otherwise the README
+  # also supplies the file list, as when one is uploaded with no folder.
+  apply_import <- function(p, keep_folder = FALSE) {
     m <- p$meta
     if (!length(p$files) && !any(nzchar(unlist(m))) && !nrow(p$models) && !nrow(p$pkgs)) {
       showNotification("Nothing recognisable was found in that file; the form was left unchanged.",
                        type = "warning", duration = 8)
-      return()
+      return(invisible(FALSE))
     }
 
     # Project-info fields
@@ -108,12 +120,20 @@ server <- function(input, output, session) {
     set_lic("license_data", m$license_data)
 
     # Structural state (files / columns / scripts / packages / R version)
-    rv$files        <- p$files
-    rv$auto         <- p$auto
-    rv$script_idx   <- which(is_script(p$files))
-    rv$script_order <- if (length(p$script_order)) p$script_order else which(is_script(p$files))
-    rv$root_name    <- if (nzchar(p$root_name)) p$root_name else NULL
-    rv$folder       <- NULL
+    if (keep_folder) {
+      # The README's script order indexes ITS file list: map it onto the
+      # folder's files by path, then add any scripts the README did not list.
+      ord <- match(p$files[p$script_order], rv$files)
+      ord <- ord[!is.na(ord) & ord %in% rv$script_idx]
+      rv$script_order <- c(ord, setdiff(rv$script_idx, ord))
+    } else {
+      rv$files        <- p$files
+      rv$auto         <- p$auto
+      rv$script_idx   <- which(is_script(p$files))
+      rv$script_order <- if (length(p$script_order)) p$script_order else which(is_script(p$files))
+      rv$root_name    <- if (nzchar(p$root_name)) p$root_name else NULL
+      rv$folder       <- NULL
+    }
     rv$r_version    <- if (nzchar(p$r_version)) p$r_version else NULL
     rv$r_version_src <- if (nzchar(p$r_version_src)) p$r_version_src else NULL
 
@@ -128,24 +148,55 @@ server <- function(input, output, session) {
     if (!is.null(p$pkgs) && nrow(p$pkgs) > 0) {
       rv$pkgs     <- p$pkgs
       rv$pkg_diag <- list(folder = "(imported from README)",
-                          n_total = length(p$files),
+                          n_total = length(rv$files),
                           n_files = length(rv$script_idx),
-                          filenames = basename(p$files[rv$script_idx]))
+                          filenames = basename(rv$files[rv$script_idx]))
     } else {
       rv$pkgs <- NULL; rv$pkg_diag <- NULL
     }
 
-    rv$import_msg <- paste0(
+    rv$import_msg <- if (keep_folder) paste0(
+      "Loaded the folder's README.md (", sum(rv$files %in% p$files), " of ",
+      plural(length(rv$files), "file"), " were in it), ",
+      plural(if (is.null(rv$pkgs)) 0L else nrow(rv$pkgs), "package"),
+      if (!is.null(rv$r_version)) paste0(", R ", rv$r_version) else "", ".")
+    else paste0(
       "Imported ", plural(length(p$files), "file"), ", ",
       plural(length(rv$script_order), "script"), ", ",
       plural(if (is.null(rv$pkgs)) 0L else nrow(rv$pkgs), "package"),
       if (!is.null(rv$r_version)) paste0(", R ", rv$r_version) else "", ".")
     showNotification(rv$import_msg, type = "message", duration = 6)
+    invisible(TRUE)
+  }
+
+  # Fills the form from the README.md at the top of the loaded folder, if
+  # READMEBuilder made it. Any other README is left alone, with a note.
+  import_folder_readme <- function() {
+    f <- find_readme(rv$folder)
+    if (is.na(f)) {
+      showNotification("No README.md in that folder, so the form starts blank.",
+                       type = "message", duration = 6)
+      return(invisible(FALSE))
+    }
+    txt <- tryCatch(readr::read_file(f), error = function(e) NULL)
+    if (is.null(txt) || !validUTF8(txt) || !is_readmebuilder(txt)) {
+      showNotification(paste0(basename(f), " was not made by READMEBuilder, so it was not loaded. ",
+                              "To try anyway, upload it on the Project Info tab."),
+                       type = "warning", duration = 10)
+      return(invisible(FALSE))
+    }
+    p <- tryCatch(parse_readme(txt), error = function(e) NULL)
+    if (is.null(p)) {
+      showNotification(paste0("Could not parse ", basename(f), "."), type = "error")
+      return(invisible(FALSE))
+    }
+    apply_import(p, keep_folder = TRUE)
   }
 
   observeEvent(input$import_md,    run_import())      # auto-import on upload
   observeEvent(input$reimport_btn, run_import())      # re-run on demand
   observeEvent(input$import_anyway, { removeModal(); run_import(force = TRUE) })
+  observeEvent(input$load_folder_readme, { removeModal(); import_folder_readme() })
 
   observeEvent(input$clear_import, {
     # title and contact are textInputs; the rest are textAreaInputs.
@@ -212,7 +263,8 @@ server <- function(input, output, session) {
         "Title, description, authors, licences, funding. If you already have a ",
         "README this app made, upload it here and hit Import to carry on editing it."),
       help_step(2, "Files",
-        "Browse to your project folder — the top level, not a subfolder. Every ",
+        "Browse to your project folder — the top level, not a subfolder — or ",
+        "click Use working directory. Every ",
         "subfolder is scanned automatically. Spreadsheets and CSVs are summarised ",
         "column by column; add a description and units for each column."),
       help_step(3, "Script Order",
@@ -255,21 +307,20 @@ server <- function(input, output, session) {
   })
 
   # ── Load folder ──────────────────────────────────────────────────────────────
-  observeEvent(input$folder_btn, {
-    req(is.list(input$folder_btn))
-    path <- parseDirPath(volumes, input$folder_btn)
-    req(nzchar(path))
-    rv$folder <- as.character(path)
-
-    files <- list.files(rv$folder, recursive = TRUE, all.files = FALSE, no.. = TRUE)
+  # Loads `path` as the project folder. With offer_readme = TRUE, a README.md
+  # that READMEBuilder made is offered for loading too. Returns TRUE if loaded.
+  load_folder <- function(path, offer_readme = TRUE) {
+    files <- list.files(path, recursive = TRUE, all.files = FALSE, no.. = TRUE)
     files <- files[!str_detect(files, "^\\.|/\\.")]
     # Skip installed dependency libraries (renv/packrat) and IDE/VCS state:
     # these are not the researcher's own data or code, and a restored renv
     # library can hold tens of thousands of files.
     files <- tree_order(files[!is_excluded(files)])
     if (!length(files)) {
-      showNotification("No files found in that folder.", type = "warning"); return()
+      showNotification("No files found in that folder.", type = "warning")
+      return(invisible(FALSE))
     }
+    rv$folder <- as.character(path)
 
     rv$files        <- files
     rv$auto         <- map(files, ~ auto_describe(file.path(rv$folder, .x)))
@@ -285,6 +336,43 @@ server <- function(input, output, session) {
     rv$imp_date <- list(); rv$imp_loc <- list(); rv$imp_scriptdesc <- list()
 
     showNotification(paste0(plural(length(files), "file"), " loaded."), type = "message")
+
+    if (offer_readme) {
+      f   <- find_readme(rv$folder)
+      txt <- if (!is.na(f)) tryCatch(readr::read_file(f), error = function(e) NULL)
+      if (!is.null(txt) && validUTF8(txt) && is_readmebuilder(txt))
+        showModal(modalDialog(
+          title = tagList(icon("file-import"), " Load the existing README?"),
+          p("This folder has a ", code(basename(f)), " made by READMEBuilder. ",
+            "Load it to carry on editing: project info, file and column ",
+            "descriptions, script order and models are filled in from it, and ",
+            "the file list and data summaries come from the folder."),
+          p(strong("Loading it replaces what is currently in the form.")),
+          footer = tagList(
+            modalButton("Don't load"),
+            actionButton("load_folder_readme", "Load README", class = "btn-primary")
+          )
+        ))
+    }
+    invisible(TRUE)
+  }
+
+  observeEvent(input$folder_btn, {
+    req(is.list(input$folder_btn))
+    path <- parseDirPath(volumes, input$folder_btn)
+    req(nzchar(path))
+    load_folder(path)
+  })
+
+  observeEvent(input$use_wd, {
+    req(launch$wd)
+    load_folder(launch$wd)
+  })
+
+  # Folder (and README) passed to build_readme(folder, edit_readme).
+  if (!is.null(launch$folder)) isolate({
+    if (load_folder(launch$folder, offer_readme = FALSE) && isTRUE(launch$edit_readme))
+      import_folder_readme()
   })
 
   output$folder_label <- renderUI({

@@ -4,7 +4,22 @@
 \alias{build_readme}
 \title{Launch the READMEBuilder Shiny app}
 \usage{
-build_readme()
+build_readme(folder = NULL, edit_readme = FALSE)
+}
+\arguments{
+\item{folder}{Optional path to the project folder to load when the app
+opens: absolute (\code{"~/projects/my-study"}), relative to the working
+directory (\code{"."}, \code{"analysis"}), or built with
+\code{here::here()}. \code{NULL} (the default) opens the app with no folder
+loaded.}
+
+\item{edit_readme}{If \code{TRUE}, and the folder contains a
+\code{README.md} made by READMEBuilder, the form is filled in from it
+(project info, file and column descriptions, units, script order and
+descriptions, models, and the recorded R / package versions), while the
+file list and data summaries come from the folder itself. A README not
+made by READMEBuilder is left alone. If \code{folder} is not given, the
+working directory is used.}
 }
 \value{
 Launches the Shiny app; does not return a value. Produces a
@@ -38,10 +53,22 @@ described, reported, and coded (an MLast-style table).
 \item \strong{Preview & Export}: live Markdown preview and one-click
 download of \code{README.md}.
 }
+
+The Files tab also has a \strong{Use working directory} button, which loads
+the folder \code{build_readme()} was called from (\code{getwd()}), so a
+project already open in your IDE does not have to be browsed to.
 }
 \examples{
 \dontrun{
 build_readme()
+
+# Open with a project folder already loaded
+build_readme(".")
+build_readme("~/projects/my-study")
+build_readme(here::here())
+
+# Load the working directory and carry on editing its README.md
+build_readme(edit_readme = TRUE)
 }
 
 }

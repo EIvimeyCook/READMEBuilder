@@ -209,6 +209,13 @@ ui <- page_fluid(
             shinyDirButton("folder_btn", "Browse for folder…",
                            title = "Select your project folder",
                            class = "btn-primary w-100", icon = icon("folder-open")),
+            # Only when launched with build_readme(), which records the
+            # caller's working directory (runApp() itself moves into the app).
+            if (!is.null(getOption("READMEBuilder.launch")$wd))
+              div(title = getOption("READMEBuilder.launch")$wd,
+                actionButton("use_wd", "Use working directory",
+                             class = "btn-outline-primary w-100 mt-2",
+                             icon = icon("location-crosshairs"))),
             br(),
             uiOutput("folder_label"),
             hr(),

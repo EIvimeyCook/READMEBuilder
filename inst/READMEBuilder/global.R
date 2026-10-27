@@ -681,6 +681,17 @@ is_readmebuilder <- function(text) {
   any(str_detect(lines, "^#\\s+\\S")) && sum(unique(heads) %in% rb_sections) >= 2
 }
 
+# The README.md (any capitalisation, or .markdown) at the TOP of `folder`, or
+# NA if there is none. Subfolders are not searched: a README there describes
+# something else (a vendored package, a data subfolder).
+find_readme <- function(folder) {
+  if (is.null(folder) || !dir.exists(folder)) return(NA_character_)
+  hits <- list.files(folder, pattern = "^readme\\.(md|markdown)$",
+                     ignore.case = TRUE, full.names = TRUE)
+  hits <- hits[utils::file_test("-f", hits)]           # files only, not folders
+  if (length(hits)) sort(hits)[1] else NA_character_
+}
+
 parse_readme <- function(text) {
   lines <- md_unescape_html(str_split(text, "\r?\n")[[1]])
 

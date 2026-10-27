@@ -86,7 +86,41 @@ library(READMEBuilder)
 build_readme()
 ```
 
-This opens the Shiny app in your browser. The app is organised into six steps,
+This opens the Shiny app in your browser. To open it with a project folder
+already loaded, pass the folder: an absolute path, a path relative to the
+working directory, or one built with `here::here()`. Add `edit_readme = TRUE`
+to also fill the form from a `README.md` that READMEBuilder made earlier (see
+[Editing an existing README](#editing-an-existing-readme)):
+
+```r
+build_readme(".")                          # the working directory
+build_readme("~/projects/my-study")        # any folder
+build_readme(here::here())                 # the project root, via {here}
+build_readme(edit_readme = TRUE)           # working directory + its README.md
+```
+
+### Ways in
+
+```mermaid
+flowchart TD
+    A["build_readme()"] --> B["Empty form"]
+    F["build_readme('my-project')<br/>build_readme(here::here())"] ---> C
+    G["build_readme(edit_readme = TRUE)<br/>build_readme('my-project',<br/>edit_readme = TRUE)"] ----> D
+    B -- "Files tab: Browse<br/>or Use working directory" --> C["Folder loaded"]
+    B -- "Project Info tab:<br/>upload README.md" --> E["README loaded,<br/>no folder needed"]
+    C -- "Files tab: Load README<br/>(if READMEBuilder made it)" --> D["Folder + its README loaded"]
+    C --> H["Fill in the tabs,<br/>then Preview & Export"]
+    D --> H
+    E --> H
+    H --> I(["README.md"])
+```
+
+Passing a folder to `build_readme()` loads only its files: the folder's README
+is used only if you add `edit_readme = TRUE`. Uploading a README on the
+**Project Info** tab works without the original folder, but the data summaries
+then come from the README rather than from the data.
+
+The app is organised into six steps,
 shown in the left-hand navigation:
 
 1. **Project Info:** title, description, abstract, instructions, DOI(s),
@@ -95,7 +129,9 @@ shown in the left-hand navigation:
    a list or type your own value (for example `CC-BY-4.0`). You can also upload
    an existing README here to reload and edit it (see
    [Editing an existing README](#editing-an-existing-readme)).
-2. **Files:** browse to your project folder. A directory map of the folder is
+2. **Files:** browse to your project folder, or click **Use working directory**
+   to load the folder `build_readme()` was called from (handy when the project
+   is already open in RStudio, Positron, VS Code or similar). A directory map of the folder is
    shown and included in the export. Tabular files are described automatically
    (see [What gets auto-detected](#what-gets-auto-detected)); add a description
    for each column (and units for numeric columns), plus the date(s) and
@@ -300,6 +336,14 @@ GitHub shows it rather than treating it as an HTML tag.)
 
 If the file you upload does not look like a README made by READMEBuilder, the
 app asks before replacing anything you have already entered.
+
+You can also edit a README straight from its project folder. Run
+`build_readme(edit_readme = TRUE)` from the project (or
+`build_readme("path/to/project", edit_readme = TRUE)`), or load the folder on
+the **Files** tab and click **Load README** when asked. The form is filled from
+the folder's top-level `README.md`, while the file list and data summaries come
+from the folder itself, so new files show up and removed ones drop out. A
+README not made by READMEBuilder is left alone.
 
 The importer is deliberately tolerant of older or hand-edited files (for example
 a `## Funders` or `## Funding` heading, and single- or split-licence wording).
