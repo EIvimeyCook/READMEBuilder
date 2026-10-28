@@ -51,10 +51,23 @@ ui <- page_fluid(
       opacity: 0.9;
     }
     .rb-main {
-      padding: 1.5rem 1.8rem;
+      padding: 1.5rem 1.8rem 5.5rem 1.8rem;   /* bottom room for .rb-download */
       background: #f8f9fa;
       min-height: 100vh;
+      min-width: 0;
     }
+    .rb-download {
+      position: fixed;
+      right: 1.5rem;
+      bottom: 1.5rem;
+      z-index: 1030;                           /* above content, below modals */
+      background: #fff;
+      padding: 0.5rem;
+      border-radius: 10px;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.18);
+    }
+    /* Notifications share the bottom-right corner; lift them above the box. */
+    #shiny-notification-panel { bottom: 4.5rem; }
     .rb-help-wrap {
       padding: 0.5rem 8px 1.2rem 8px;
       margin-top: 0.6rem;
@@ -334,20 +347,22 @@ ui <- page_fluid(
       # 6 · Preview & Export ─────────────────────────────────────────────────────
       conditionalPanel("input.main_nav === 'tab_preview'",
         card(
-          card_header(
-            icon("eye"), " README.md preview",
-            downloadButton("export_btn", " Download README.md",
-                           class = "btn-sm btn-success ms-auto",
-                           icon  = icon("download"))
-          ),
+          card_header(icon("eye"), " README.md preview"),
           card_body(
             p(class = "text-muted small",
-              "Raw Markdown — copy or download as ", code("README.md"), "."),
+              "Raw Markdown — copy it, or use the Download button in the ",
+              "bottom-right corner to save it as ", code("README.md"), "."),
             verbatimTextOutput("preview")
           )
         )
       )
 
     ) # end rb-main
-  )   # end d-flex
+  ),  # end d-flex
+
+  # Always-visible download box, so the README can be saved from any tab.
+  div(class = "rb-download",
+    downloadButton("export_btn", "Download README.md",
+                   class = "btn-success", icon = icon("download"))
+  )
 )

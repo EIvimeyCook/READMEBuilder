@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "rb",
+      "runtimeExecutable": "Rscript",
+      "runtimeArgs": ["-e", "Sys.setlocale('LC_ALL', 'en_GB.UTF-8'); devtools::load_all(quiet = TRUE); shiny::runApp('inst/READMEBuilder', port = 8766, launch.browser = FALSE)"],
+      "port": 8766
+    }
+  ]
+}
