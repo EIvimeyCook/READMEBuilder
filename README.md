@@ -70,8 +70,8 @@ share (for example on Zenodo, Dryad, or GitHub).
 The browser version is the same app, running entirely inside your browser
 (through [Shinylive](https://posit-dev.github.io/r-shinylive/) and
 [webR](https://docs.r-wasm.org/webr/latest/)). There is nothing to install,
-and your files are never sent anywhere: the zip is unpacked and read by R
-running in the page itself. It is built from the `development` branch.
+and your files are never sent anywhere: the folder you choose (or your zip) is
+read by R running in the page itself. It is built from the `development` branch.
 
 To use it:
 
@@ -98,7 +98,7 @@ How it differs from the R package:
 - **Package versions come only from an `renv.lock`.** The browser cannot see
   the packages installed on your computer, so packages missing from the lockfile
   are listed as `not recorded`, and the R version is shown as `—` unless the
-  lockfile records one. Add an `renv.lock` to the zip to record them, or import a
+  lockfile records one. Add an `renv.lock` to the project to record them, or import a
   README made by the R package: its versions are kept for any package the
   lockfile does not cover.
 - **The first visit is slow.** The page downloads R itself (about 90 MB) the

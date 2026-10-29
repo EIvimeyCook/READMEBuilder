@@ -137,6 +137,6 @@ Version 0.2.1, on the `development` branch. The stable version on `main` is
 * Documentation updated for the six-step workflow (including the Models tab),
   and clarifies that `jsonlite` is optional (needed only to read `renv.lock`).
 * README updated for the browser version, including how it differs from the
-  package and how to build it locally.
+  package.
 * Setting the environment variable `READMEBUILDER_WEB=true` makes the desktop
   app behave like the browser version, for testing.
