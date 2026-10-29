@@ -163,8 +163,9 @@ ui <- page_fluid(
   # the folder <input> is used and gives each file's path as
   # webkitRelativePath. Either way skipped and hidden files are dropped, the
   # rest go to the hidden folder_upload input with their paths in
-  # input$folder_paths, and server.R rebuilds the folder.
-  if (is_web) tags$script(HTML("
+  # input$folder_paths, and server.R rebuilds the folder. The drag-and-drop
+  # part (and the loader) is used by the desktop app too.
+  tags$script(HTML("
     const rbSkipDir = /^(renv|packrat|\\.Rproj\\.user|\\.git|\\.Rcheck|node_modules|__pycache__|\\.venv|venv|\\.quarto|__MACOSX)$/;
     const rbSkipPath = /(^|\\/)(renv|packrat|\\.Rproj\\.user|\\.git|\\.Rcheck|node_modules|__pycache__|\\.venv|venv|\\.quarto|__MACOSX)(\\/|$)|(^|\\/)\\./;
 
@@ -442,26 +443,23 @@ ui <- page_fluid(
       conditionalPanel("input.main_nav === 'tab_files'",
         layout_sidebar(fillable = FALSE,
           sidebar = sidebar(title = "Load a folder", width = 240,
-            # Both versions: pick a folder, or upload it as a zip. In the browser
-            # the folder is picked with the browser's own folder chooser (its
-            # files are read in the page, see the script below); the desktop
-            # app browses the disk directly.
+            # Both versions: drop a folder (or zip) on the box, pick a folder, or
+            # upload a zip. A dropped folder is read by the page (see the script
+            # above) and needs no "upload" confirmation in any browser. To pick
+            # a folder, the browser version uses the browser's folder chooser;
+            # the desktop app browses the disk directly.
+            div(id = "folder_drop", class = "rb-drop mb-2",
+              icon("folder-open", class = "fa-lg"), br(),
+              strong("Drag your project folder here"), br(),
+              tags$span(class = "small", "(or a .zip)")),
+            # Receives a dropped or picked folder's files; their paths arrive
+            # as input$folder_paths.
+            div(style = "display:none", fileInput("folder_upload", NULL, multiple = TRUE)),
             if (is_web)
-              tagList(
-                # Dropping a folder needs no "upload" confirmation in any
-                # browser, unlike the folder chooser below.
-                div(id = "folder_drop", class = "rb-drop mb-2",
-                  icon("folder-open", class = "fa-lg"), br(),
-                  strong("Drag your project folder here"), br(),
-                  tags$span(class = "small", "(or a .zip)")),
-                tags$label(class = "btn btn-outline-primary w-100 mb-0", `for` = "folder_pick",
-                  icon("folder-open"), " Choose folder…",
-                  tags$input(id = "folder_pick", type = "file", multiple = NA,
-                             webkitdirectory = NA, style = "display:none")),
-                # Receives the picked folder's files, named by their path.
-                div(style = "display:none",
-                    fileInput("folder_upload", NULL, multiple = TRUE))
-              )
+              tags$label(class = "btn btn-outline-primary w-100 mb-0", `for` = "folder_pick",
+                icon("folder-open"), " Choose folder…",
+                tags$input(id = "folder_pick", type = "file", multiple = NA,
+                           webkitdirectory = NA, style = "display:none"))
             else
               shinyDirButton("folder_btn", "Browse for folder…",
                              title = "Select your project folder",
@@ -479,6 +477,7 @@ ui <- page_fluid(
             p(class = "small text-muted mb-0",
               "Choose the top level of your project (not a subfolder). To upload a zip: right-click the folder › Compress (macOS) or ",
               "Send to › Compressed folder (Windows).",
+              if (!is_web) " A dropped folder or zip is copied into a temporary folder; Browse reads it where it is.",
               if (is_web) tagList(" ", strong("Your files stay on your computer:"),
                 " they are read by this page and never sent anywhere. Choose folder… ",
                 "may make your browser ask to \"upload\" the files (its standard ",

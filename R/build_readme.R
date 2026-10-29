@@ -31,7 +31,8 @@
 #' The Files tab also has a \strong{Use working directory} button, which loads
 #' the folder \code{build_readme()} was called from (\code{getwd()}), so a
 #' project already open in your IDE does not have to be browsed to. A project
-#' can also be uploaded as a \code{.zip}.
+#' folder (or a \code{.zip} of it) can also be dragged onto the Files tab, or
+#' uploaded with \strong{Upload .zip}.
 #'
 #' The same app also runs in a web browser without installing anything, at
 #' \url{https://eivimeycook.github.io/READMEBuilder/}. There the project folder
@@ -96,9 +97,12 @@ build_readme <- function(folder = NULL, edit_readme = FALSE) {
     )
   }
 
-  # Read by the app's server; restored when the app closes.
+  # Read by the app's server; restored when the app closes. Shiny's default
+  # 5 MB upload limit is too small for a dropped or zipped project.
   op <- options(READMEBuilder.launch = list(wd = wd, folder = folder,
-                                            edit_readme = edit_readme))
+                                            edit_readme = edit_readme),
+                shiny.maxRequestSize = max(getOption("shiny.maxRequestSize", 0),
+                                           500 * 1024^2))
   on.exit(options(op), add = TRUE)
   shiny::runApp(app_dir, display.mode = "normal")
 }

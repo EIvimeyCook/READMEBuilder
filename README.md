@@ -163,7 +163,7 @@ flowchart TD
     F["build_readme('my-project')<br/>build_readme(here::here())"] ---> C
     G["build_readme(edit_readme = TRUE)<br/>build_readme('my-project',<br/>edit_readme = TRUE)"] ----> D
     W["Browser version"] --> B
-    B -- "Files tab: Browse, Use working<br/>directory, or upload a .zip<br/>(browser: drag in a folder or .zip)" --> C["Folder loaded"]
+    B -- "Files tab: drag in a folder or .zip,<br/>Browse, Use working directory<br/>(browser: Choose folder)" --> C["Folder loaded"]
     B -- "Project Info tab:<br/>upload README.md" --> E["README loaded,<br/>no folder needed"]
     C -- "Files tab: Load README<br/>(if READMEBuilder made it)" --> D["Folder + its README loaded"]
     C --> H["Fill in the tabs,<br/>then Preview & Export"]
@@ -192,10 +192,12 @@ across the top on a phone):
    [Editing an existing README](#editing-an-existing-readme)).
 2. **Files:** browse to your project folder, or click **Use working directory**
    to load the folder `build_readme()` was called from (handy when the project
-   is already open in RStudio, Positron, VS Code or similar), or upload the
-   folder as a `.zip`. In the browser version, drag the folder (or a `.zip`)
-   onto the drop box, or use **Choose folder…** or **Upload .zip…**. A
-   directory map of the folder
+   is already open in RStudio, Positron, VS Code or similar). You can also drag
+   the folder (or a `.zip` of it) from Finder or File Explorer onto the **Drag
+   your project folder here** box, or use **Upload .zip…**; a dropped or zipped
+   folder is copied to a temporary folder, while **Browse** reads it where it
+   is. In the browser version there is **Choose folder…** instead of Browse and
+   Use working directory. A directory map of the folder
    is shown and included in the export. Tabular files are described
    automatically (see [What gets auto-detected](#what-gets-auto-detected)); add a
    description for each column (and units for numeric columns), plus the date(s)

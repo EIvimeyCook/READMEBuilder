@@ -18,7 +18,8 @@ library(fs)
 # READMEBUILDER_WEB=true forces it, to try the web behaviour in desktop R.
 is_web <- R.version$os == "emscripten" ||
   tolower(Sys.getenv("READMEBUILDER_WEB")) %in% c("true", "1")
-# Shiny's default 5 MB upload limit is too small for a zipped project.
+# Shiny's default 5 MB upload limit is too small for a zipped project. In the
+# browser it is set here; build_readme() sets it (and restores it) on desktop.
 if (is_web) options(shiny.maxRequestSize = 500 * 1024^2)
 
 # ── Logo ──────────────────────────────────────────────────────────────────────

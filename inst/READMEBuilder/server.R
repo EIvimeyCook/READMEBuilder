@@ -358,8 +358,8 @@ server <- function(input, output, session) {
           paste0("Drag your project folder — the top level, not a subfolder — onto ",
                  "the box (or use Choose folder…, or a .zip). Every ")
         else
-          paste0("Browse to your project folder — the top level, not a subfolder — ",
-                 "click Use working directory, or upload the folder as a .zip. Every "),
+          paste0("Drag your project folder — the top level, not a subfolder — onto ",
+                 "the box, browse to it, click Use working directory, or upload it as a .zip. Every "),
         "subfolder is scanned automatically. Spreadsheets and CSVs are summarised ",
         "column by column; add a description and units for each column."),
       help_step(3, "Script Order",

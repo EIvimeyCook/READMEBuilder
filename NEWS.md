@@ -13,8 +13,10 @@ Version 0.2.1, on the `development` branch. The stable version on `main` is
   come from the project's `renv.lock`; packages it does not list are marked
   `not recorded`. Built by `web/build.R` and published by a GitHub Actions
   workflow; neither is part of the R package.
-* The desktop app can also load a project uploaded as a `.zip` (**Upload
-  .zip…** on the Files tab), so both versions offer a folder and a zip.
+* Both versions can load a project by dragging its folder (or a `.zip` of it)
+  onto the Files tab, or with **Upload .zip…**, alongside **Browse** / **Use
+  working directory** (desktop) or **Choose folder…** (browser). Uploads of up
+  to 500 MB are accepted (Shiny's default limit is 5 MB).
 * The **Download README.md** button now floats in the bottom-right corner on
   every tab, instead of sitting off to the right in the Preview card.
 * Packages are scanned as soon as a folder is loaded, so the README has its
