@@ -12,11 +12,10 @@ Description: A Shiny application that walks researchers through building a
     dependencies from scripts (including pacman, librarian, import and
     groundhog loaders and renv.lock), supports script run-order documentation,
     and exports a formatted README.md. An existing README can be re-imported and
-    edited.
+    edited. The same app also runs in a web browser without installation.
 License: MIT + file LICENSE
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
-RoxygenNote: 7.3.3
 Imports:
     shiny (>= 1.7.0),
     bslib (>= 0.5.0),
@@ -30,5 +29,7 @@ Imports:
 Suggests:
     devtools,
     jsonlite
-URL: https://github.com/EIvimeyCook/READMEBuilder
+URL: https://github.com/EIvimeyCook/READMEBuilder,
+    https://eivimeycook.github.io/READMEBuilder/
 BugReports: https://github.com/EIvimeyCook/READMEBuilder/issues
+Config/roxygen2/version: 8.1.1

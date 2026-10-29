@@ -12,14 +12,16 @@
 
 > [!IMPORTANT]
 > **You are viewing the `development` branch.** It has new features and bug
-> fixes that are not yet in the stable version on `main`, including one-click
-> licence choices and a Source column for package versions, plus fixes for DOI
-> badges, re-importing a README, and script descriptions being wiped when
-> scripts are reordered. See [what's new and
+> fixes that are not yet in the stable version on `main`, including a
+> [browser version that needs no installation](#use-it-in-your-browser),
+> one-click licence choices, a Source column for package versions, and many
+> fixes to re-importing a README. See [what's new and
 > fixed](https://github.com/EIvimeyCook/READMEBuilder/blob/development/NEWS.md)
 > and [how to install either version](#installation).
 
 READMEBuilder is an R package with an interactive Shiny app that turns a project folder into a single `README.md` documenting both **the data and the code**. 
+It also runs [in your web browser](#use-it-in-your-browser), with nothing to
+install.
 
 Good documentation is what makes an analysis reproducible: not just what the data
 columns mean, but which scripts to run and in what order, and which package (and
@@ -53,8 +55,50 @@ share (for example on Zenodo, Dryad, or GitHub).
 - **Built-in walkthrough.** A **How to use this app** button explains each tab;
   it also opens automatically the first time you run the app.
 - **Re-open and edit.** Import a README the app made earlier and continue where
-  you left off, without the original data folder.
-- **Runs entirely on your machine.** Files are read locally and never uploaded.
+  you left off, without the original data folder. Exporting and re-importing
+  gives back exactly what you entered.
+- **Runs entirely on your machine.** Files are read locally and never uploaded,
+  in the R package and in the browser version alike.
+- **No-install browser version.** The same app [runs in a web
+  browser](#use-it-in-your-browser): upload your project as a `.zip`.
+
+## Use it in your browser
+
+**<https://eivimeycook.github.io/READMEBuilder/>**
+
+The browser version is the same app, running entirely inside your browser
+(through [Shinylive](https://posit-dev.github.io/r-shinylive/) and
+[webR](https://docs.r-wasm.org/webr/latest/)). There is nothing to install,
+and your files are never sent anywhere: the zip is unpacked and read by R
+running in the page itself. It is built from the `development` branch.
+
+To use it:
+
+1. Zip your project folder, the top level rather than a subfolder (on macOS:
+   right-click › **Compress**; on Windows: right-click › **Send to** ›
+   **Compressed (zipped) folder**).
+2. On the **Files** tab, click **Upload .zip…** and choose it. Zips of up to
+   500 MB are accepted.
+3. Work through the tabs as usual, then click **Download README.md**.
+
+How it differs from the R package:
+
+- **Folders arrive as a zip.** There is no folder browser and no **Use working
+  directory** button, since the browser cannot see your disk.
+- **Package versions come only from an `renv.lock`.** The browser cannot see
+  the packages installed on your computer, so packages missing from the lockfile
+  are listed as `not recorded`, and the R version is shown as `—` unless the
+  lockfile records one. Add an `renv.lock` to the zip to record them, or import a
+  README made by the R package: its versions are kept for any package the
+  lockfile does not cover.
+- **The first visit is slow.** The page downloads R itself (about 90 MB) the
+  first time; later visits are faster.
+- **The walkthrough is remembered by your browser.** It opens on your first
+  visit only (using the browser's local storage); in a private window it opens
+  every time.
+
+Everything else (data summaries, script order, models, importing and editing an
+existing README) works the same as in the R package.
 
 ## Installation
 
@@ -106,7 +150,8 @@ flowchart TD
     A["build_readme()"] --> B["Empty form"]
     F["build_readme('my-project')<br/>build_readme(here::here())"] ---> C
     G["build_readme(edit_readme = TRUE)<br/>build_readme('my-project',<br/>edit_readme = TRUE)"] ----> D
-    B -- "Files tab: Browse<br/>or Use working directory" --> C["Folder loaded"]
+    W["Browser version"] --> B
+    B -- "Files tab: Browse<br/>or Use working directory<br/>(browser: upload a .zip)" --> C["Folder loaded"]
     B -- "Project Info tab:<br/>upload README.md" --> E["README loaded,<br/>no folder needed"]
     C -- "Files tab: Load README<br/>(if READMEBuilder made it)" --> D["Folder + its README loaded"]
     C --> H["Fill in the tabs,<br/>then Preview & Export"]
@@ -118,28 +163,34 @@ flowchart TD
 Passing a folder to `build_readme()` loads only its files: the folder's README
 is used only if you add `edit_readme = TRUE`. Uploading a README on the
 **Project Info** tab works without the original folder, but the data summaries
-then come from the README rather than from the data.
+then come from the README rather than from the data. If you upload a README
+first and load the folder afterwards, the README's descriptions are kept for
+every file the folder still has.
 
-The app is organised into six steps,
-shown in the left-hand navigation:
+The app is organised into six steps, shown in the navigation (on the left, or
+across the top on a phone):
 
 1. **Project Info:** title, description, abstract, instructions, DOI(s),
    citation text, authors (with ORCIDs), affiliations, contact, funders, and
    acknowledgements. Code and data are licensed **separately**: choose each from
-   a list or type your own value (for example `CC-BY-4.0`). You can also upload
-   an existing README here to reload and edit it (see
+   a list or type your own value (for example `CC-BY-4.0`); a typed value is
+   kept even if you click away without pressing Enter, and the **×** clears it.
+   ORCID iDs typed after an author's name become links in the README. You can
+   also upload an existing README here to reload and edit it (see
    [Editing an existing README](#editing-an-existing-readme)).
 2. **Files:** browse to your project folder, or click **Use working directory**
    to load the folder `build_readme()` was called from (handy when the project
-   is already open in RStudio, Positron, VS Code or similar). A directory map of the folder is
-   shown and included in the export. Tabular files are described automatically
-   (see [What gets auto-detected](#what-gets-auto-detected)); add a description
-   for each column (and units for numeric columns), plus the date(s) and
-   location of data collection.
+   is already open in RStudio, Positron, VS Code or similar). In the browser
+   version, upload the folder as a `.zip` instead. A directory map of the folder
+   is shown and included in the export. Tabular files are described
+   automatically (see [What gets auto-detected](#what-gets-auto-detected)); add a
+   description for each column (and units for numeric columns), plus the date(s)
+   and location of data collection.
 3. **Script Order:** reorder your code with the up/down arrows to record the
    sequence it should be run in, and add a short description of what each script
-   does.  
-4. **R Packages:** scans every R script (`.R`, `.Rmd`, `.qmd`, `.Rnw`) for
+   does. Scripts are described here rather than on the Files tab.  
+4. **R Packages:** runs automatically when a folder is loaded (click **Scan**
+   to run it again). It scans every R script (`.R`, `.Rmd`, `.qmd`, `.Rnw`) for
    `library()`, `require()`, `requireNamespace()`, `pacman::p_load()`,
    `librarian::shelf()`, `import::from()`, `groundhog.library()` and `pkg::fun`
    calls, then resolves each package's version (base R packages such as `stats`
@@ -149,12 +200,16 @@ shown in the left-hand navigation:
    `library(pkg, character.only = TRUE)` where the package name is a variable.
    If the folder contains an `renv.lock`, the versions (and R version) recorded
    there are used in preference to what is installed; a **Source** column in the
-   package table says where each version came from.  
+   package table says where each version came from. If there are several
+   `renv.lock` files, the one at the top of the project is used (otherwise the
+   first one found), and the app says so; a lockfile that cannot be read is
+   reported rather than silently ignored.  
 5. **Models (optional):** record each analysis and where it lives — see
    [Recording models (MLast)](#recording-models-mlast). Leave this tab empty and
    no Models section is added.
-6. **Preview & Export:** a live Markdown preview, with one-click download of
-   `README.md`.
+6. **Preview & Export:** a live Markdown preview. The **Download README.md**
+   button sits in the bottom-right corner on every tab, so you can save at any
+   point.
 
 ## What gets auto-detected
 
@@ -178,13 +233,17 @@ Each column in a tabular file gets an automatic summary:
 Files that look tabular by extension but do not parse cleanly are quietly
 skipped and listed under **Other Files** for a free-text description instead.
 A `.txt` file is only treated as a table if it is tab-delimited, so prose notes
-are not summarised as fake tables.
+are not summarised as fake tables. A file with a header row but no data still
+gets its columns listed (marked "no data rows"), and CSVs saved by Excel on
+Windows (Windows-1252 rather than UTF-8) are read with their accents intact.
 
-For Excel workbooks with more than one sheet, the first sheet is summarised and
-the README lists the names of all sheets.
+For Excel workbooks with more than one sheet, the first sheet that has any data
+is summarised (so an empty cover sheet is skipped), and the README lists the
+names of all sheets.
 
-Column names can contain any characters (spaces, brackets, `:`, accents, and so
-on).
+Column names, and file and folder names, can contain any characters (spaces,
+brackets, `:`, backticks, accents, and so on). Office lock files (`~$book.xlsx`),
+`Thumbs.db` and `desktop.ini` are not part of a project and are left out.
 
 ## What the output looks like
 
@@ -239,8 +298,15 @@ Scripts should be run in the following order:
 ````
 
 The **Source** column reads `renv.lock` for versions taken from the lockfile,
-`installed` for versions installed on the machine that generated the README, or
-`not installed`. If a project mixes the two, a note under the table says so.
+`installed` for versions installed on the machine that generated the README,
+`not installed`, or (in the browser version) `not recorded` for packages the
+lockfile does not list. If a project mixes sources, a note under the table says
+so.
+
+Text you type is written as Markdown, so you can use links, lists, code blocks
+and so on. A single line break inside a paragraph is kept as a line break when
+the README is shown on GitHub (it is written with a trailing `\`, which the app
+removes again on import).
 
 If you fill in the optional **Models** tab, a models table is included too:
 
@@ -252,11 +318,12 @@ If you fill in the optional **Models** tab, a models table is included too:
 
 ## Getting help inside the app
 
-The **How to use this app** button at the bottom of the left-hand navigation
-opens a short walkthrough of what each tab is for. It also opens by itself the
-first time you launch the app, and then not again — the fact that you have seen
-it is recorded in a small marker file under `tools::R_user_dir("READMEBuilder",
-"config")`. Delete that file to see the walkthrough again on next launch.
+The **How to use this app** button at the bottom of the navigation opens a
+short walkthrough of what each tab is for. It also opens by itself the first
+time you launch the app, and then not again — the fact that you have seen it is
+recorded in a small marker file under `tools::R_user_dir("READMEBuilder",
+"config")`. Delete that file to see the walkthrough again on next launch. In the
+browser version it is remembered in your browser's local storage instead.
 
 ## Recording models (MLast)
 
@@ -309,8 +376,11 @@ packages, and searching for code locations:
 
 ```text
 renv    packrat    .Rproj.user    .git      .Rcheck
-venv    .venv      node_modules   .quarto   __pycache__
+venv    .venv      node_modules   .quarto   __pycache__   __MACOSX
 ```
+
+(`__MACOSX` is the folder of hidden metadata that macOS adds to zips.) Loading a
+folder that holds nothing else says so, rather than just "no files found".
 
 The whole `renv/` directory is skipped, not just `renv/library`: `renv/activate.R`
 is a bootstrap script renv generates rather than anything you wrote, and its own
@@ -323,19 +393,25 @@ and put `activate.R` in your script run order.
 ## Editing an existing README
 
 On the **Project Info** tab, upload a `README.md` previously produced by
-READMEBuilder and click **Import / Re-import**. The app parses the file and
+READMEBuilder; it is imported as soon as you choose it (**Import / Re-import**
+loads it again, for example to undo edits). The app parses the file and
 repopulates the whole form (project info, the file list and directory map,
 per-column descriptions and units, the script run order and descriptions, any
 recorded models, and the R / package versions) so you can edit and re-export
-*without* needing the original data folder. **Clear** resets everything to a blank README.
+*without* needing the original data folder. **Clear** resets everything to a
+blank README, after asking.
 
 Exporting a README and importing it again gives back exactly what you entered,
-including multi-line descriptions and text containing Markdown headings, `---`,
-or `<...>`. (Text in angle brackets is escaped as `\<...>` in the export, so
-GitHub shows it rather than treating it as an HTML tag.)
+including multi-line descriptions, code blocks, and text containing Markdown
+headings, `---`, `<...>`, or lines that look like the README's own structure
+(such as `## Description` or `**Location:**`). Such text is escaped with a
+backslash in the export, so GitHub shows it as you typed it and the importer
+does not mistake it for a section; the escape is removed again on import.
 
-If the file you upload does not look like a README made by READMEBuilder, the
-app asks before replacing anything you have already entered.
+Importing replaces what is in the form, so the app asks first whenever the form
+already has content, and also if the file does not look like a README made by
+READMEBuilder. If a project folder is loaded at the time, it is kept: the
+README's descriptions are matched to the folder's files.
 
 You can also edit a README straight from its project folder. Run
 `build_readme(edit_readme = TRUE)` from the project (or
@@ -357,6 +433,10 @@ auto-summaries from the underlying data, re-load the project folder on the
 files and their contents stay on your machine: folder browsing, file reading, and
 package resolution all happen locally, and nothing you load is uploaded to any
 server.
+
+The [browser version](#use-it-in-your-browser) works the same way: the web page
+contains R itself (webR), and your zip is unpacked and read inside the page. The
+website only supplies the app's files; it never receives yours.
 
 The one exception is cosmetic. The app's theme asks your browser to load the
 Inter font from Google Fonts. No file data is included in that request, and if
@@ -384,6 +464,33 @@ skipped if it is not installed. Install it with `install.packages("jsonlite")`.
   folder if you want summaries recomputed from current files.
 - The **Models** tab is filled in by you. Only the code location can be
   suggested automatically, and only for scripts in the loaded folder.
+- In the browser version, package versions come only from an `renv.lock` (see
+  [Use it in your browser](#use-it-in-your-browser)).
+
+## Building the browser version
+
+The browser version is built from the same app code as the package
+(`inst/READMEBuilder`); the app switches to zip upload and lockfile-only
+versions when it finds itself running in webR. To build and preview it locally
+(this needs the `shinylive` package):
+
+```r
+source("web/build.R")   # from the package root; writes web/_site (about 90 MB)
+```
+
+```bash
+python3 -m http.server 8765 --directory web/_site
+```
+
+Then open <http://localhost:8765>. The files have to be served: opening
+`index.html` directly does not work. Setting the environment variable
+`READMEBUILDER_WEB=true` makes the desktop app behave like the browser version,
+which is handy for testing.
+
+On GitHub, `.github/workflows/deploy-web.yml` builds the site and publishes it
+to GitHub Pages on every push to `main` or `development` (with **Settings ›
+Pages › Source** set to **GitHub Actions**). Neither `web/` nor the built site
+is part of the R package.
 
 ## Bug reports and contributions
 

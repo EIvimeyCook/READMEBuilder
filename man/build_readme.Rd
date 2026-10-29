@@ -46,8 +46,9 @@ and describe each one.
 \item \strong{R Packages}: scan scripts for \code{library()},
 \code{require()}, \code{requireNamespace()}, \code{pkg::fun}, and the
 pacman, librarian, import, and groundhog loaders, then resolve each
-version. If an \code{renv.lock} is present, its recorded versions
-(and R version) are used.
+version. The scan runs as soon as a folder is loaded. If an
+\code{renv.lock} is present, its recorded versions (and R version)
+are used.
 \item \strong{Models} (optional): record where each analysis is
 described, reported, and coded (an MLast-style table).
 \item \strong{Preview & Export}: live Markdown preview and one-click
@@ -57,6 +58,11 @@ download of \code{README.md}.
 The Files tab also has a \strong{Use working directory} button, which loads
 the folder \code{build_readme()} was called from (\code{getwd()}), so a
 project already open in your IDE does not have to be browsed to.
+
+The same app also runs in a web browser without installing anything, at
+\url{https://eivimeycook.github.io/READMEBuilder/}. There the project is
+uploaded as a \code{.zip} (read inside the page, never sent anywhere) and
+package versions come only from the project's \code{renv.lock}.
 }
 \examples{
 \dontrun{

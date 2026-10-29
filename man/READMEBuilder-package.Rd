@@ -8,18 +8,24 @@
 \description{
 \if{html}{\figure{logo.png}{options: style='float: right' alt='logo' width='120'}}
 
-A Shiny application that walks researchers through building a high-quality README file for research datasets and code. Automatically describes tabular data columns (ranges, levels, NAs), detects R package dependencies from scripts (including pacman, librarian, import and groundhog loaders and renv.lock), supports script run-order documentation, and exports a formatted README.md. An existing README can be re-imported and edited.
+A Shiny application that walks researchers through building a high-quality README file for research datasets and code. Automatically describes tabular data columns (ranges, levels, NAs), detects R package dependencies from scripts (including pacman, librarian, import and groundhog loaders and renv.lock), supports script run-order documentation, and exports a formatted README.md. An existing README can be re-imported and edited. The same app also runs in a web browser without installation.
 }
 \seealso{
 Useful links:
 \itemize{
   \item \url{https://github.com/EIvimeyCook/READMEBuilder}
+  \item \url{https://eivimeycook.github.io/READMEBuilder/}
   \item Report bugs at \url{https://github.com/EIvimeyCook/READMEBuilder/issues}
 }
 
 }
 \author{
 \strong{Maintainer}: Edward R. Ivimey-Cook \email{e.ivimeycook@gmail.com} (\href{https://orcid.org/0000-0003-4910-0443}{ORCID})
+
+Authors:
+\itemize{
+  \item Edward R. Ivimey-Cook \email{e.ivimeycook@gmail.com} (\href{https://orcid.org/0000-0003-4910-0443}{ORCID})
+}
 
 }
 \keyword{internal}
