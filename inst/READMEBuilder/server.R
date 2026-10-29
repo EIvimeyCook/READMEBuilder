@@ -4,10 +4,13 @@ server <- function(input, output, session) {
 
   # OS-appropriate roots for the folder picker: drive letters (C:, D:, ...) on
   # Windows, "/" on macOS/Linux. getVolumes() returns a FUNCTION, hence the ().
-  volumes <- c(Home = fs::path_home(),
-               "R Installation" = R.home(),
-               shinyFiles::getVolumes()())
-  shinyDirChoose(input, "folder_btn", roots = volumes, session = session)
+  # Not in the browser, which has no disk to browse (folders come as a .zip).
+  if (!is_web) {
+    volumes <- c(Home = fs::path_home(),
+                 "R Installation" = R.home(),
+                 shinyFiles::getVolumes()())
+    shinyDirChoose(input, "folder_btn", roots = volumes, session = session)
+  }
 
   # Set by build_readme(): the caller's working directory, and any folder to
   # load at start. NULL when the app is run directly with runApp().
@@ -32,7 +35,11 @@ server <- function(input, output, session) {
     imp_units      = list(),
     imp_date       = list(),
     imp_loc        = list(),
-    imp_scriptdesc = list()
+    imp_scriptdesc = list(),
+    # Bumped on every folder load, import and clear, so the per-file and
+    # per-script boxes are redrawn from the new defaults even when the file
+    # list is unchanged (same zip twice, re-import of the same README).
+    gen = 0
   )
 
   # Lookups that tolerate missing keys.
@@ -50,16 +57,58 @@ server <- function(input, output, session) {
     else "project"
   })
 
+  # Scans the loaded folder's scripts for packages (and renv.lock versions).
+  # Defined early: a README imported at launch may call it.
+  scan_folder <- function() {
+    result <- tryCatch(extract_packages(rv$folder),
+      error = function(e) { showNotification(paste("Error:", e$message), type = "error"); NULL })
+    if (!is.null(result)) {
+      # A version an imported README recorded is kept for any package the scan
+      # cannot version (no lockfile entry; in the browser, nothing installed).
+      old <- isolate(rv$pkgs)
+      if (!is.null(old) && nrow(old) && nrow(result$pkgs)) {
+        unk <- result$pkgs$Source %in% c("not recorded", "not installed")
+        hit <- match(result$pkgs$Package, old$Package)
+        use <- unk & !is.na(hit) & !(old$Version[hit] %in% c("—", "", NA))
+        result$pkgs$Version[use] <- old$Version[hit[use]]
+        result$pkgs$Source[use]  <- if ("Source" %in% names(old))
+          ifelse(nzchar(old$Source[hit[use]]), old$Source[hit[use]], "README") else "README"
+      }
+      rv$pkgs     <- result$pkgs
+      rv$pkg_diag <- result
+      # If an renv.lock recorded an R version, adopt it for the export.
+      if (!is.na(result$lock_r_version)) {
+        rv$r_version <- result$lock_r_version; rv$r_version_src <- "renv.lock"
+      }
+    }
+    invisible(result)
+  }
+
   # ── Import an existing README ────────────────────────────────────────────────
   # A file that does not look like a READMEBuilder README (no generated footer
   # or section headings) is NOT imported straight away, because importing
   # replaces the whole form: the user is asked first. If even a forced import
   # finds nothing usable, the form is left untouched.
-  run_import <- function(force = FALSE) {
-    if (is.null(input$import_md)) {
+  # The README file chosen for import, kept apart from input$import_md so that
+  # Clear can forget it (a file input's value cannot be reset from the server).
+  import_file <- reactiveVal(NULL)
+  observeEvent(input$import_md, { import_file(input$import_md); run_import() })
+
+  # TRUE if anything has been entered or loaded, so replacing it needs a yes.
+  form_has_content <- function() {
+    ids <- c("title", "description", "abstract", "instructions", "additional_info",
+             "doi", "citation_text", "authors", "affiliation", "contact", "funders",
+             "acknowledgements", "license_code", "license_data")
+    any(vapply(ids, function(id) nzchar(str_trim(paste(input[[id]] %||% "", collapse = ""))), logical(1))) ||
+      length(rv$files) > 0 || nrow(rv$models) > 0
+  }
+
+  run_import <- function(force = FALSE, confirmed = FALSE) {
+    f <- import_file()
+    if (is.null(f)) {
       showNotification("Choose a README.md first.", type = "warning"); return()
     }
-    txt <- tryCatch(readr::read_file(input$import_md$datapath), error = function(e) NULL)
+    txt <- read_text_file(f$datapath)
     if (is.null(txt) || !nzchar(txt) || !validUTF8(txt)) {
       showNotification("Could not read that file (empty, or not a UTF-8 text file).",
                        type = "error"); return()
@@ -67,7 +116,7 @@ server <- function(input, output, session) {
     if (!force && !is_readmebuilder(txt)) {
       showModal(modalDialog(
         title = tagList(icon("triangle-exclamation"), " Not a READMEBuilder README?"),
-        p(code(input$import_md$name), " does not look like a README made by ",
+        p(code(f$name), " does not look like a README made by ",
           "READMEBuilder, so little or nothing may be read from it."),
         p(strong("Importing replaces everything currently in the form.")),
         footer = tagList(
@@ -77,11 +126,26 @@ server <- function(input, output, session) {
       ))
       return()
     }
+    if (!confirmed && form_has_content()) {
+      showModal(modalDialog(
+        title = tagList(icon("file-import"), " Replace the current form?"),
+        p("Importing ", code(f$name), " replaces the project information, ",
+          "descriptions and models you have entered."),
+        if (!is.null(rv$folder))
+          p("The loaded folder is kept; the README's descriptions are matched to its files."),
+        footer = tagList(
+          modalButton("Cancel"),
+          actionButton("import_confirm", "Import", class = "btn-primary")
+        )
+      ))
+      return()
+    }
     p <- tryCatch(parse_readme(txt), error = function(e) NULL)
     if (is.null(p)) {
       showNotification("Could not parse that README.", type = "error"); return()
     }
-    apply_import(p)
+    # With a folder loaded, attach the README to it rather than dropping it.
+    apply_import(p, keep_folder = !is.null(rv$folder))
   }
 
   # Fills the form from a parsed README. With keep_folder = TRUE (a README found
@@ -114,7 +178,7 @@ server <- function(input, output, session) {
       ch <- license_choices
       if (nzchar(val) && !(val %in% ch)) ch <- c(ch, stats::setNames(val, val))
       updateSelectizeInput(session, id, choices = ch, selected = val,
-                           options = list(create = TRUE))
+                           options = free_select_opts)
     }
     set_lic("license_code", m$license_code)
     set_lic("license_data", m$license_data)
@@ -143,6 +207,7 @@ server <- function(input, output, session) {
     rv$imp_date       <- p$dates
     rv$imp_loc        <- p$locs
     rv$imp_scriptdesc <- p$script_desc
+    rv$gen <- isolate(rv$gen) + 1
     rv$models         <- if (!is.null(p$models) && nrow(p$models) > 0) p$models else mlast_template()
 
     if (!is.null(p$pkgs) && nrow(p$pkgs) > 0) {
@@ -150,20 +215,24 @@ server <- function(input, output, session) {
       rv$pkg_diag <- list(folder = "(imported from README)",
                           n_total = length(rv$files),
                           n_files = length(rv$script_idx),
-                          filenames = basename(rv$files[rv$script_idx]))
+                          filenames = rv$files[rv$script_idx])
     } else {
       rv$pkgs <- NULL; rv$pkg_diag <- NULL
     }
+    # The folder's own renv.lock is more current than the versions written in
+    # an older README, so rescan when there is one.
+    if (keep_folder && !is.null(rv$folder)) scan_folder()   # README versions kept as fallback
 
+    n_models <- if (nrow(rv$models)) paste0(", ", plural(nrow(rv$models), "model")) else ""
     rv$import_msg <- if (keep_folder) paste0(
-      "Loaded the folder's README.md (", sum(rv$files %in% p$files), " of ",
+      "Applied the README to the loaded folder (", sum(rv$files %in% p$files), " of ",
       plural(length(rv$files), "file"), " were in it), ",
-      plural(if (is.null(rv$pkgs)) 0L else nrow(rv$pkgs), "package"),
+      plural(if (is.null(rv$pkgs)) 0L else nrow(rv$pkgs), "package"), n_models,
       if (!is.null(rv$r_version)) paste0(", R ", rv$r_version) else "", ".")
     else paste0(
       "Imported ", plural(length(p$files), "file"), ", ",
       plural(length(rv$script_order), "script"), ", ",
-      plural(if (is.null(rv$pkgs)) 0L else nrow(rv$pkgs), "package"),
+      plural(if (is.null(rv$pkgs)) 0L else nrow(rv$pkgs), "package"), n_models,
       if (!is.null(rv$r_version)) paste0(", R ", rv$r_version) else "", ".")
     showNotification(rv$import_msg, type = "message", duration = 6)
     invisible(TRUE)
@@ -178,7 +247,7 @@ server <- function(input, output, session) {
                        type = "message", duration = 6)
       return(invisible(FALSE))
     }
-    txt <- tryCatch(readr::read_file(f), error = function(e) NULL)
+    txt <- read_text_file(f)
     if (is.null(txt) || !validUTF8(txt) || !is_readmebuilder(txt)) {
       showNotification(paste0(basename(f), " was not made by READMEBuilder, so it was not loaded. ",
                               "To try anyway, upload it on the Project Info tab."),
@@ -193,12 +262,32 @@ server <- function(input, output, session) {
     apply_import(p, keep_folder = TRUE)
   }
 
-  observeEvent(input$import_md,    run_import())      # auto-import on upload
   observeEvent(input$reimport_btn, run_import())      # re-run on demand
-  observeEvent(input$import_anyway, { removeModal(); run_import(force = TRUE) })
+  observeEvent(input$import_anyway,  { removeModal(); run_import(force = TRUE, confirmed = TRUE) })
+  observeEvent(input$import_confirm, { removeModal(); run_import(force = TRUE, confirmed = TRUE) })
   observeEvent(input$load_folder_readme, { removeModal(); import_folder_readme() })
 
+  # Clears the text and progress bar a file input shows (the browser keeps
+  # them after the server has moved on).
+  reset_file_input <- function(id) session$sendCustomMessage("rb_reset_file", id)
+
   observeEvent(input$clear_import, {
+    showModal(modalDialog(
+      title = tagList(icon("eraser"), " Clear everything?"),
+      p("This removes all project information, the loaded folder, every file, ",
+        "column and script description, and all models. It cannot be undone."),
+      footer = tagList(
+        modalButton("Cancel"),
+        actionButton("clear_confirm", "Clear everything", class = "btn-danger")
+      )
+    ))
+  })
+
+  observeEvent(input$clear_confirm, {
+    removeModal()
+    import_file(NULL)
+    reset_file_input("import_md")
+    if (is_web) reset_file_input("zip_upload")
     # title and contact are textInputs; the rest are textAreaInputs.
     updateTextInput(session, "title",   value = "")
     updateTextInput(session, "contact", value = "")
@@ -206,15 +295,16 @@ server <- function(input, output, session) {
                  "doi","citation_text","authors","affiliation","funders","acknowledgements"))
       updateTextAreaInput(session, id, value = "")
     updateSelectizeInput(session, "license_code", choices = license_choices, selected = "",
-                         options = list(create = TRUE))
+                         options = free_select_opts)
     updateSelectizeInput(session, "license_data", choices = license_choices, selected = "",
-                         options = list(create = TRUE))
+                         options = free_select_opts)
     rv$files <- character(0); rv$auto <- list()
     rv$script_idx <- integer(0); rv$script_order <- integer(0)
     rv$pkgs <- NULL; rv$pkg_diag <- NULL; rv$r_version <- NULL; rv$r_version_src <- NULL
     rv$root_name <- NULL; rv$folder <- NULL; rv$import_msg <- NULL
     rv$imp_desc <- list(); rv$imp_coldesc <- list(); rv$imp_units <- list()
     rv$imp_date <- list(); rv$imp_loc <- list(); rv$imp_scriptdesc <- list()
+    rv$gen <- isolate(rv$gen) + 1
     rv$models <- mlast_template()
     showNotification("Cleared. Form reset to a blank README.", type = "message")
   })
@@ -255,16 +345,20 @@ server <- function(input, output, session) {
 
       p(class = "text-muted small",
         "READMEBuilder walks you through documenting a project — both the data ",
-        "and the code — and exports a single README.md. Work through the tabs on ",
-        "the left; nothing is uploaded anywhere, and you can stop and re-import ",
-        "a README later to carry on."),
+        "and the code — and exports a single README.md. Work through the tabs in order; ",
+        if (is_web) "your files stay in your browser and are never sent anywhere, "
+        else "nothing is uploaded anywhere, ",
+        "and you can stop and re-import a README later to carry on."),
 
       help_step(1, "Project Info",
         "Title, description, authors, licences, funding. If you already have a ",
-        "README this app made, upload it here and hit Import to carry on editing it."),
+        "README this app made, choose it here to carry on editing it."),
       help_step(2, "Files",
-        "Browse to your project folder — the top level, not a subfolder — or ",
-        "click Use working directory. Every ",
+        if (is_web)
+          "Zip your project folder — the top level, not a subfolder — and upload it. Every "
+        else
+          paste0("Browse to your project folder — the top level, not a subfolder — or ",
+                 "click Use working directory. Every "),
         "subfolder is scanned automatically. Spreadsheets and CSVs are summarised ",
         "column by column; add a description and units for each column."),
       help_step(3, "Script Order",
@@ -272,7 +366,9 @@ server <- function(input, output, session) {
         "what each one does."),
       help_step(4, "R Packages",
         "Scans your scripts for the packages they use. If the project has an ",
-        "renv.lock, versions come from there."),
+        if (is_web)
+          "renv.lock, versions (and the R version) come from there; without one they are shown as \"not recorded\", because the browser cannot see your installed packages."
+        else "renv.lock, versions come from there."),
       help_step(5, "Models (optional)",
         "Record each analysis and where it lives: the outcome as named in your ",
         "paper, the matching data column, where the method is described, where ",
@@ -298,13 +394,38 @@ server <- function(input, output, session) {
 
   observeEvent(input$show_help, showModal(help_modal()))
 
-  # First-run: show the walkthrough once, then remember that we have.
-  observe({
+  # First-run: show the walkthrough once, then remember that we have. In the
+  # browser the R side forgets everything on reload, so the browser's own
+  # storage remembers instead (ui.R reports it as input$rb_seen_help).
+  if (is_web) {
+    observeEvent(input$rb_seen_help, once = TRUE, {
+      if (!isTRUE(input$rb_seen_help)) {
+        showModal(help_modal())
+        session$sendCustomMessage("rb_mark_help", TRUE)
+      }
+    })
+  } else observe({
     if (!has_seen_help()) {
       showModal(help_modal())
       mark_help_seen()
     }
   })
+
+  # Everything currently in the per-file and per-script boxes, keyed by file
+  # path (and column name), in the same shape as the imported defaults rv$imp_*.
+  snapshot_typed <- function() {
+    f    <- rv$files
+    keep <- function(x) Filter(function(v) length(v) && any(nzchar(unlist(v))), x)
+    fe   <- get_file_extras()
+    list(
+      desc    = keep(stats::setNames(get_descriptions(), f)),
+      coldesc = keep(stats::setNames(get_col_descs(), f)),
+      units   = keep(stats::setNames(get_units(), f)),
+      date    = keep(stats::setNames(map(fe, "date"), f)),
+      loc     = keep(stats::setNames(map(fe, "loc"), f)),
+      scriptdesc = keep(stats::setNames(get_script_descs(), f[rv$script_order]))
+    )
+  }
 
   # ── Load folder ──────────────────────────────────────────────────────────────
   # Loads `path` as the project folder. With offer_readme = TRUE, a README.md
@@ -315,10 +436,22 @@ server <- function(input, output, session) {
     # Skip installed dependency libraries (renv/packrat) and IDE/VCS state:
     # these are not the researcher's own data or code, and a restored renv
     # library can hold tens of thousands of files.
-    files <- tree_order(files[!is_excluded(files)])
+    n_any <- length(files)
+    files <- tree_order(files[!is_excluded(files) & !is_junk(files)])
     if (!length(files)) {
-      showNotification("No files found in that folder.", type = "warning")
+      showNotification(
+        if (n_any) paste("No project files found: everything in it is in a skipped",
+                         "folder (renv, packrat, .git, .Rproj.user, …) or is system clutter.")
+        else "No files found in that folder.", type = "warning", duration = 8)
       return(invisible(FALSE))
+    }
+    # A README imported with no folder (the help's step 1 before step 2): keep
+    # what it brought, and anything typed since, for the folder's matching
+    # files. Otherwise a fresh folder supersedes the previous one entirely.
+    carry <- is.null(rv$folder) && length(rv$files) > 0
+    if (carry) {
+      kept      <- snapshot_typed()
+      old_order <- rv$files[rv$script_order]
     }
     rv$folder <- as.character(path)
 
@@ -327,19 +460,32 @@ server <- function(input, output, session) {
     rv$script_idx   <- which(is_script(files))
     rv$script_order <- rv$script_idx
     rv$root_name    <- basename(rv$folder)
-    rv$r_version    <- NULL                  # use live R.version until a scan finds a lockfile
-    rv$r_version_src <- NULL
+    # The imported README's package and R versions are kept (as a fallback for
+    # the scan below) only in the carry-over case.
+    if (!carry) {
+      rv$r_version <- NULL; rv$r_version_src <- NULL; rv$pkgs <- NULL
+    }
+    rv$pkg_diag <- NULL; rv$import_msg <- NULL
+    if (carry) {
+      rv$imp_desc <- kept$desc; rv$imp_coldesc <- kept$coldesc; rv$imp_units <- kept$units
+      rv$imp_date <- kept$date; rv$imp_loc <- kept$loc; rv$imp_scriptdesc <- kept$scriptdesc
+      ord <- match(old_order, files)
+      ord <- ord[!is.na(ord) & ord %in% rv$script_idx]
+      rv$script_order <- c(ord, setdiff(rv$script_idx, ord))
+    } else {
+      rv$imp_desc <- list(); rv$imp_coldesc <- list(); rv$imp_units <- list()
+      rv$imp_date <- list(); rv$imp_loc <- list(); rv$imp_scriptdesc <- list()
+    }
+    rv$gen <- isolate(rv$gen) + 1
+    scan_folder()          # packages straight away, so the README has them
 
-    # A fresh folder supersedes any imported defaults / packages.
-    rv$pkgs <- NULL; rv$pkg_diag <- NULL; rv$import_msg <- NULL
-    rv$imp_desc <- list(); rv$imp_coldesc <- list(); rv$imp_units <- list()
-    rv$imp_date <- list(); rv$imp_loc <- list(); rv$imp_scriptdesc <- list()
-
-    showNotification(paste0(plural(length(files), "file"), " loaded."), type = "message")
+    showNotification(paste0(plural(length(files), "file"), " loaded.",
+                            if (carry) " Descriptions from the imported README were kept for matching files."),
+                     type = "message")
 
     if (offer_readme) {
       f   <- find_readme(rv$folder)
-      txt <- if (!is.na(f)) tryCatch(readr::read_file(f), error = function(e) NULL)
+      txt <- if (!is.na(f)) read_text_file(f)
       if (!is.null(txt) && validUTF8(txt) && is_readmebuilder(txt))
         showModal(modalDialog(
           title = tagList(icon("file-import"), " Load the existing README?"),
@@ -375,9 +521,44 @@ server <- function(input, output, session) {
       import_folder_readme()
   })
 
+  # Web mode: unzip into a folder named after the zip, then load it. Zipping a
+  # folder usually gives one top-level folder (plus macOS's __MACOSX and
+  # .DS_Store), so step into it when that is all there is. In the browser the
+  # unzipped files sit in memory, so only the loaded zip's copy is kept.
+  zip_dir <- NULL
+  observeEvent(input$zip_upload, {
+    z    <- input$zip_upload
+    root <- tempfile("rb_zip_")
+    dest <- file.path(root, tools::file_path_sans_ext(z$name))
+    n_entries <- zip_n_entries(z$datapath)   # read from the zip itself: unzip() errors on an empty one
+    ok   <- !is.na(n_entries) && n_entries > 0 &&
+      tryCatch({ utils::unzip(z$datapath, exdir = dest); TRUE },
+               error = function(e) FALSE, warning = function(w) FALSE)
+    if (ok) {
+      fix_zip_names(z$datapath, dest)   # reads the zip's index, so before unlink
+      fix_zip_slashes(dest)
+    }
+    unlink(z$datapath)
+    if (!ok) {
+      unlink(root, recursive = TRUE)
+      showNotification(
+        if (identical(n_entries, 0L)) "That zip is empty."
+        else "That file could not be opened as a .zip archive.", type = "error")
+      return()
+    }
+    top <- setdiff(list.files(dest, all.files = TRUE, no.. = TRUE), c("__MACOSX", ".DS_Store"))
+    if (length(top) == 1 && dir.exists(file.path(dest, top))) dest <- file.path(dest, top)
+    if (load_folder(dest)) {
+      if (!is.null(zip_dir)) unlink(zip_dir, recursive = TRUE)
+      zip_dir <<- root
+    } else {
+      unlink(root, recursive = TRUE)
+    }
+  })
+
   output$folder_label <- renderUI({
     req(rv$folder)
-    tags$small(class = "text-muted", icon("folder"), " ", rv$folder)
+    tags$small(class = "text-muted", icon("folder"), " ", show_path(rv$folder))
   })
 
   output$file_summary_ui <- renderUI({
@@ -404,6 +585,7 @@ server <- function(input, output, session) {
 
   # ── File cards ───────────────────────────────────────────────────────────────
   output$files_ui <- renderUI({
+    rv$gen
     if (!length(rv$files))
       return(div(class = "text-muted mt-4 text-center",
                  icon("folder-open", class = "fa-2x mb-2"), br(),
@@ -440,21 +622,24 @@ server <- function(input, output, session) {
             tags$td(style = "width:25%;vertical-align:middle;padding:4px 6px",
                     tags$small(class = "text-muted", col_d$summary)),
             tags$td(style = "width:38%;vertical-align:middle;padding:3px 4px",
-                    textInput(paste0("coldesc_", i, "_", j), label = NULL,
-                              value = imp_get2(rv$imp_coldesc, f, col_d$name),
-                              placeholder = "Column description")),
+                    # A one-row text area, so a description can hold line
+                    # breaks (the README table keeps them as <br>).
+                    textAreaInput(paste0("coldesc_", i, "_", j), label = NULL,
+                                  value = imp_get2(rv$imp_coldesc, f, col_d$name),
+                                  placeholder = "Column description", rows = 1,
+                                  resize = "vertical")),
             tags$td(style = "width:15%;vertical-align:middle;padding:3px 4px", unit_cell)
           )
         })
         tagList(
           tags$hr(),
           tags$p(class = "text-muted small mb-1",
-                 icon("table"), " ", a$nrow, " rows × ", a$ncol,
-                 " cols — add a description for each column; units for numeric columns:"),
+                 icon("table"), " ", plural(a$nrow, "row"), " × ", plural(a$ncol, "col"),
+                 " — add a description for each column; units for numeric columns:"),
           if (length(a$sheets) > 1)
             tags$p(class = "text-muted small mb-1", icon("layer-group"), " ",
                    length(a$sheets), " sheets (", paste(a$sheets, collapse = ", "),
-                   "); only the first, ", code(a$sheets[1]), ", is summarised."),
+                   "); only the first with data is summarised."),
           tags$table(class = "table table-sm table-bordered small mb-0",
             tags$thead(class = "table-light",
               tags$tr(tags$th("Column"), tags$th("Auto-summary"),
@@ -475,10 +660,16 @@ server <- function(input, output, session) {
       card(class = "mb-3",
         card_header(tags$code(f), badge),
         card_body(
-          textAreaInput(paste0("desc_", i), "Description",
-                        value = imp_get(rv$imp_desc, f),
-                        placeholder = "What does this file contain, how was it produced, any caveats?",
-                        rows = 2),
+          # Scripts are described (and exported) from the Script Order tab, so
+          # a box here would collect text that never reaches the README.
+          if (is_script(f) && is.null(a))
+            p(class = "text-muted small mb-0", icon("arrow-right"),
+              " Describe this script on the Script Order tab.")
+          else
+            textAreaInput(paste0("desc_", i), "Description",
+                          value = imp_get(rv$imp_desc, f),
+                          placeholder = "What does this file contain, how was it produced, any caveats?",
+                          rows = 2),
           units_ui
         )
       )
@@ -489,23 +680,30 @@ server <- function(input, output, session) {
   # Script-description inputs are keyed by FILE INDEX (script_desc_<i>), not by
   # display position, so reordering scripts keeps each script's description.
   output$script_order_ui <- renderUI({
+    rv$gen
     if (!length(rv$script_order))
       return(p(class = "text-muted",
                "No scripts detected. Load a folder with .R/.Rmd files, or import a README."))
     n <- length(rv$script_order)
+    # Each arrow names its SCRIPT (file index), not its position, so a quick
+    # second click before the list redraws moves the same script again rather
+    # than whichever one has moved into that position. It also sends the boxes'
+    # current text, since Shiny sends typed text a moment after the click.
+    move_js <- function(i, dir) sprintf(paste0(
+      "const d = {}; document.querySelectorAll('#script_order_ui textarea')",
+      ".forEach(t => d[t.id] = t.value); Shiny.setInputValue('script_move',",
+      "{file:%d,dir:'%s',descs:d},{priority:'event'})"), i, dir)
     map(seq_len(n), function(k) {
       i <- rv$script_order[k]
       f <- rv$files[i]
       up_btn <- if (k > 1)
         tags$button(class = "btn btn-sm btn-outline-secondary me-1",
-                    onclick = sprintf("Shiny.setInputValue('script_move',{pos:%d,dir:'up'},{priority:'event'})", k),
-                    icon("arrow-up"))
+                    onclick = move_js(i, "up"), icon("arrow-up"))
       else
         tags$button(class = "btn btn-sm btn-outline-secondary me-1", disabled = NA, icon("arrow-up"))
       down_btn <- if (k < n)
         tags$button(class = "btn btn-sm btn-outline-secondary",
-                    onclick = sprintf("Shiny.setInputValue('script_move',{pos:%d,dir:'down'},{priority:'event'})", k),
-                    icon("arrow-down"))
+                    onclick = move_js(i, "down"), icon("arrow-down"))
       else
         tags$button(class = "btn btn-sm btn-outline-secondary", disabled = NA, icon("arrow-down"))
       div(class = "d-flex align-items-start mb-3 gap-3",
@@ -531,17 +729,23 @@ server <- function(input, output, session) {
   outputOptions(output, "script_order_ui", suspendWhenHidden = FALSE)
 
   observeEvent(input$script_move, {
+    mv  <- input$script_move
+    pos <- match(mv$file, rv$script_order)
+    if (is.na(pos)) return()
+
     # Reordering re-renders the list, which recreates every description box
     # from rv$imp_scriptdesc. Save what has been typed first, keyed by path,
-    # or every description is wiped on the first arrow click.
+    # or every description is wiped on the first arrow click. The click carries
+    # the boxes' text; fall back to the input values.
     sd <- rv$imp_scriptdesc
     for (i in rv$script_order) {
-      val <- input[[paste0("script_desc_", i)]]
+      id  <- paste0("script_desc_", i)
+      val <- if (!is.null(mv$descs[[id]])) mv$descs[[id]] else input[[id]]
       if (!is.null(val)) sd[[rv$files[i]]] <- val
     }
     rv$imp_scriptdesc <- sd
 
-    pos <- input$script_move$pos; dir <- input$script_move$dir
+    dir <- mv$dir
     n   <- length(rv$script_order)
     if (dir == "up"   && pos > 1) rv$script_order[c(pos-1,pos)] <- rv$script_order[c(pos,pos-1)]
     if (dir == "down" && pos < n) rv$script_order[c(pos,pos+1)] <- rv$script_order[c(pos+1,pos)]
@@ -560,16 +764,7 @@ server <- function(input, output, session) {
         type = "warning", duration = 8)
       return()
     }
-    result <- tryCatch(extract_packages(rv$folder),
-      error = function(e) { showNotification(paste("Error:", e$message), type = "error"); NULL })
-    if (!is.null(result)) {
-      rv$pkgs     <- result$pkgs
-      rv$pkg_diag <- result
-      # If an renv.lock recorded an R version, adopt it for the export.
-      if (!is.na(result$lock_r_version)) {
-        rv$r_version <- result$lock_r_version; rv$r_version_src <- "renv.lock"
-      }
-    }
+    scan_folder()
   })
 
   output$pkg_ui <- renderUI({
@@ -578,15 +773,27 @@ server <- function(input, output, session) {
     lock_line <- {
       lf <- d$lock_file
       if (is.null(lf)) NULL                        # imported diagnostic, no lock field
+      else if (is.na(lf) && is_web)
+        tagList(br(), tags$b("renv.lock: "), "not found. The browser can't see ",
+                "your installed package versions; add an renv.lock to the zip ",
+                "to record them.")
       else if (is.na(lf))
         tagList(br(), tags$b("renv.lock: "), "not found; using installed versions")
+      else if (isFALSE(d$lock_ok))
+        tagList(br(), tags$b("renv.lock: "), code(d$lock_rel %||% basename(lf)),
+                tags$span(class = "text-danger",
+                  paste0(" ", d$lock_reason %||% "could not be read",
+                         ", so no versions were taken from it.")))
       else
-        tagList(br(), tags$b("renv.lock: "), code(basename(lf)),
-                sprintf(" (%d of %d versions from lockfile)", d$n_from_lock, nrow(rv$pkgs)))
+        tagList(br(), tags$b("renv.lock: "), code(d$lock_rel %||% basename(lf)),
+                sprintf(" (%d of %d versions from lockfile)", d$n_from_lock, nrow(rv$pkgs)),
+                if (isTRUE(d$n_locks > 1))
+                  tags$span(class = "text-warning",
+                    sprintf(" — %d renv.lock files found; only this one is used.", d$n_locks)))
     }
     diag_box <- div(class = "alert alert-secondary mt-3 small",
       tags$b("Diagnostic info"), br(),
-      tags$b("Source: "), code(d$folder), br(),
+      tags$b("Source: "), code(show_path(d$folder)), br(),
       tags$b("Total files: "), d$n_total, br(),
       tags$b("R/Rmd/qmd files: "), d$n_files,
       if (d$n_files > 0)
@@ -597,8 +804,8 @@ server <- function(input, output, session) {
       return(tagList(diag_box,
         p(class = "text-muted mt-2", "No packages found.")))
     tagList(diag_box, hr(),
-      p(strong(nrow(rv$pkgs), " packages"), " | R ",
-        code(rv$r_version %||% paste0(R.version$major, ".", R.version$minor))),
+      p(strong(plural(nrow(rv$pkgs), "package")), " | R ",
+        code(rv$r_version %||% current_r_version())),
       tableOutput("pkg_table"))
   })
 
@@ -609,9 +816,12 @@ server <- function(input, output, session) {
   # ── Models (optional MLast-style table) ──────────────────────────────────────
 
   observeEvent(input$add_model, {
-    req(nzchar(str_trim(input$model_outcome_data  %||% "")) ||
-        nzchar(str_trim(input$model_outcome_paper %||% "")))
-    rv$models <- bind_rows(rv$models, tibble(
+    if (!nzchar(str_trim(input$model_outcome_data  %||% "")) &&
+        !nzchar(str_trim(input$model_outcome_paper %||% ""))) {
+      showNotification("Enter an outcome (paper or data) to add a model.", type = "warning")
+      return()
+    }
+    new <- tibble(
       outcome_paper = input$model_outcome_paper %||% "",
       outcome_data  = input$model_outcome_data  %||% "",
       predictors    = input$model_predictors    %||% "",
@@ -620,7 +830,16 @@ server <- function(input, output, session) {
       results_loc   = input$model_results_loc   %||% "",
       code_loc      = input$model_code_loc      %||% "",
       notes         = input$model_notes         %||% ""
-    ))
+    )
+    # A double-click sends a second click before the cleared fields come back,
+    # so it would add the same model again.
+    n <- nrow(rv$models)
+    if (n > 0 && isTRUE(all.equal(as.list(rv$models[n, names(new)]), as.list(new),
+                                  check.attributes = FALSE))) {
+      showNotification("That model is already the last one in the table.", type = "warning")
+      return()
+    }
+    rv$models <- bind_rows(rv$models, new)
     updateTextInput(session,     "model_outcome_paper", value = "")
     updateTextInput(session,     "model_outcome_data",  value = "")
     updateTextInput(session,     "model_predictors",    value = "")
@@ -631,10 +850,26 @@ server <- function(input, output, session) {
     updateTextAreaInput(session, "model_notes",         value = "")
   })
 
-  observeEvent(input$clear_models, { rv$models <- mlast_template() })
+  observeEvent(input$clear_models, {
+    req(nrow(rv$models) > 0)
+    showModal(modalDialog(
+      title = tagList(icon("trash"), " Delete all models?"),
+      p(paste0("This removes all ", plural(nrow(rv$models), "recorded model"), ". It cannot be undone.")),
+      footer = tagList(modalButton("Cancel"),
+                       actionButton("clear_models_confirm", "Delete all", class = "btn-danger"))
+    ))
+  })
+  observeEvent(input$clear_models_confirm, { removeModal(); rv$models <- mlast_template() })
+
+  # Each delete button sends its row number and the table version it was drawn
+  # for, so a second click on a stale button (a double-click) is ignored rather
+  # than deleting the row that moved up into its place.
+  models_rev <- reactiveVal(0)
+  observeEvent(rv$models, models_rev(isolate(models_rev()) + 1))
 
   observeEvent(input$model_delete, {
-    i <- input$model_delete
+    i <- input$model_delete$i
+    if (!identical(as.numeric(input$model_delete$rev), as.numeric(models_rev()))) return()
     if (i >= 1 && i <= nrow(rv$models)) rv$models <- rv$models[-i, ]
   })
 
@@ -648,7 +883,7 @@ server <- function(input, output, session) {
     }
     pat <- str_trim(input$model_outcome_data %||% "")
     if (!nzchar(pat))
-      pat <- str_trim((str_split(input$model_predictors %||% "", ",")[[1]])[1] %||% "")
+      pat <- (c(Filter(nzchar, str_trim(str_split(input$model_predictors %||% "", ",")[[1]])), ""))[1]
     if (!nzchar(pat)) {
       showNotification("Enter an outcome or predictor to search for first.", type = "warning")
       return()
@@ -694,12 +929,15 @@ server <- function(input, output, session) {
     rows <- map(seq_len(nrow(rv$models)), function(i) {
       r <- rv$models[i, ]
       tags$tr(
-        tags$td(i), tags$td(r$outcome_paper), tags$td(tags$code(r$outcome_data)),
+        tags$td(i), tags$td(r$outcome_paper),
+        tags$td(if (nzchar(r$outcome_data)) tags$code(r$outcome_data)),
         tags$td(r$predictors), tags$td(r$test_type), tags$td(r$methods_loc),
-        tags$td(r$results_loc), tags$td(tags$code(r$code_loc)), tags$td(r$notes),
+        tags$td(r$results_loc), tags$td(if (nzchar(r$code_loc)) tags$code(r$code_loc)),
+        tags$td(class = "rb-notes", r$notes),
         tags$td(tags$button(
           class = "btn btn-sm btn-outline-danger",
-          onclick = sprintf("Shiny.setInputValue('model_delete',%d,{priority:'event'})", i),
+          onclick = sprintf("Shiny.setInputValue('model_delete',{i:%d,rev:%d},{priority:'event'})",
+                            i, models_rev()),
           icon("trash")))
       )
     })
@@ -720,8 +958,13 @@ server <- function(input, output, session) {
          funders = input$funders, acknowledgements = input$acknowledgements)
   })
 
+  # Shiny keeps the last value of an input whose box is no longer drawn, so
+  # read only the boxes files_ui draws for each file (none for scripts; date
+  # and location only for files read as a table).
   get_descriptions <- reactive({
-    map(seq_along(rv$files), ~ input[[paste0("desc_", .x)]] %||% "")
+    map(seq_along(rv$files), function(i)
+      if (is_script(rv$files[i]) && is.null(rv$auto[[i]])) ""
+      else input[[paste0("desc_", i)]] %or% "")
   })
 
   get_units <- reactive({
@@ -753,6 +996,7 @@ server <- function(input, output, session) {
 
   get_file_extras <- reactive({
     map(seq_along(rv$files), function(i) {
+      if (is.null(rv$auto[[i]])) return(list(date = "", loc = ""))
       list(date = input[[paste0("collection_date_",     i)]] %||% "",
            loc  = input[[paste0("collection_location_", i)]] %||% "")
     })
@@ -760,7 +1004,7 @@ server <- function(input, output, session) {
 
   # Read by FILE INDEX in run order, so values follow the script across reorders.
   get_script_descs <- reactive({
-    map(rv$script_order, ~ input[[paste0("script_desc_", .x)]] %||% "")
+    map(rv$script_order, ~ input[[paste0("script_desc_", .x)]] %or% "")
   })
 
   # ── Build & export ────────────────────────────────────────────────────────────
@@ -784,6 +1028,10 @@ server <- function(input, output, session) {
   })
 
   output$preview    <- renderText({ readme_text() })
+
+  # Browser version: keep the current README in the page, so a Download click
+  # while R is idle saves it at once (see the click handler in ui.R).
+  if (is_web) observe(session$sendCustomMessage("rb_readme", readme_text()))
   output$export_btn <- downloadHandler(
     filename = function() "README.md",
     # Force UTF-8 bytes so the directory-map box characters, "×", and accented

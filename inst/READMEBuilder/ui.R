@@ -94,7 +94,7 @@ ui <- page_fluid(
     .rb-step p  { margin-bottom: 0.25rem; font-size: 0.9rem; }
     .rb-two-col {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(min(420px, 100%), 1fr));
       gap: 1rem;
       align-items: start;
     }
@@ -115,9 +115,107 @@ ui <- page_fluid(
     .rb-import .card-header { background: #e8f4f6; }
     .rb-lic-picks { margin-top: -0.5rem; margin-bottom: 0.75rem; }
     .rb-chip { padding: 0.1rem 0.55rem; font-size: 0.78rem; margin: 0 0.25rem 0.25rem 0; }
+    /* Wrap long paragraphs instead of one very wide sideways-scrolling line. */
+    #preview { white-space: pre-wrap; overflow-wrap: anywhere; }
+    /* Script descriptions fill their card rather than a fixed 300px. */
+    #script_order_ui .flex-grow-1 { min-width: 0; }
+    #script_order_ui .shiny-input-container, #script_order_ui textarea { width: 100% !important; }
+    /* The side menu runs to the window edge. */
+    body > .container-fluid { padding-left: 0; padding-right: 0; }
+    /* Recorded models: wrap long values; notes keep their line breaks. */
+    #models_table_ui td { white-space: normal; overflow-wrap: anywhere; min-width: 5rem; }
+    #models_table_ui td.rb-notes { white-space: pre-line; }
+    /* Phones and narrow windows: the menu sits above the content. */
+    @media (max-width: 767.98px) {
+      .rb-shell { flex-direction: column; }
+      .rb-sidenav { width: 100% !important; min-height: 0; position: static; }
+      .rb-sidenav .nav-pills { flex-direction: row !important; flex-wrap: wrap; }
+      .rb-logo { display: none; }
+      .rb-main { padding: 1rem 1rem 5.5rem 1rem; min-height: 0; }
+      .rb-download { right: 0.75rem; bottom: 0.75rem; }
+    }
   "))),
 
-  div(class = "d-flex",
+  # Clears a file input's text and progress bar after the server has dropped
+  # the file (Clear), so it does not keep showing the old file's name.
+  tags$script(HTML("
+    Shiny.addCustomMessageHandler('rb_reset_file', function (id) {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.value = '';
+      const box = el.closest('.input-group');
+      const txt = box && box.querySelector('input[type=text]');
+      if (txt) txt.value = '';
+      const bar = document.getElementById(id + '_progress');
+      if (bar) bar.style.visibility = 'hidden';
+    });
+  ")),
+
+  # Browser version: remember across visits that the walkthrough was seen.
+  if (is_web) tags$script(HTML("
+    $(document).on('shiny:connected', function () {
+      let seen = false;
+      try { seen = window.localStorage.getItem('rb_seen_help') === '1'; } catch (e) {}
+      Shiny.setInputValue('rb_seen_help', seen);
+    });
+    Shiny.addCustomMessageHandler('rb_mark_help', function (msg) {
+      try { window.localStorage.setItem('rb_seen_help', '1'); } catch (e) {}
+    });
+  ")),
+
+  # In the browser the app is served by a service worker, which the browser's
+  # download manager bypasses, so a plain download link gets a 404. Fetch the
+  # file through the page instead (which the service worker does answer) and
+  # save it from memory under the name the server gives it. For the README
+  # itself, while R is idle the copy server.R keeps in the page is saved at
+  # once, so no wait can make the browser treat the save as unprompted.
+  if (is_web) tags$script(HTML("
+    let rbReadme = null;
+    Shiny.addCustomMessageHandler('rb_readme', function (txt) { rbReadme = txt; });
+    function rbSave(blob, name) {
+      const url = URL.createObjectURL(blob);
+      const tmp = document.createElement('a');
+      tmp.href = url;
+      tmp.download = name;
+      document.body.appendChild(tmp);
+      tmp.click();
+      tmp.remove();
+      setTimeout(function () { URL.revokeObjectURL(url); }, 10000);
+    }
+    document.addEventListener('click', async function (e) {
+      const a = e.target.closest('a.shiny-download-link');
+      if (!a) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const href = a.getAttribute('href');
+      if (!href || a.classList.contains('disabled')) return;
+      if (a.id === 'export_btn' && rbReadme !== null &&
+          !document.documentElement.classList.contains('shiny-busy')) {
+        // Same bytes as the download handler (writeLines adds a final newline).
+        rbSave(new Blob([rbReadme + '\\n'], { type: 'text/markdown;charset=utf-8' }), 'README.md');
+        return;
+      }
+      // R may be busy for a few seconds; show that the click was taken.
+      const label = a.innerHTML;
+      a.classList.add('disabled');
+      a.innerHTML = 'Preparing…';
+      try {
+        const resp = await fetch(href);
+        if (!resp.ok) throw new Error('HTTP ' + resp.status);
+        const cd = resp.headers.get('Content-Disposition') || '';
+        const m  = /filename\\*=UTF-8''([^;]+)/i.exec(cd) || /filename=\"?([^\";]+)\"?/i.exec(cd);
+        rbSave(await resp.blob(), m ? decodeURIComponent(m[1]) : 'download');
+      } catch (err) {
+        if (window.Shiny && Shiny.notifications)
+          Shiny.notifications.show({ html: 'The download failed (' + err.message + ').', type: 'error' });
+      } finally {
+        a.innerHTML = label;
+        a.classList.remove('disabled');
+      }
+    }, true);
+  ")),
+
+  div(class = "d-flex rb-shell",
 
     # ── Side-nav ──────────────────────────────────────────────────────────────
     div(class = "rb-sidenav", style = "width:200px; flex-shrink:0;",
@@ -172,6 +270,9 @@ ui <- page_fluid(
             card_header(icon("file-lines"), " Basic Details"),
             textInput("title", "Project title *",
                       placeholder = "Reproductive isolation in Drosophila melanogaster"),
+            p(class = "small text-muted mb-2", icon("circle-info"),
+              " Text fields accept Markdown. Line breaks are kept; leave a blank ",
+              "line to start a new paragraph."),
             textAreaInput("description", "Description", rows = 3,
                           placeholder = "A concise description of what this project/dataset is."),
             textAreaInput("abstract", "Abstract", rows = 4,
@@ -188,13 +289,13 @@ ui <- page_fluid(
             layout_column_wrap(width = "220px", gap = "0.75rem",
               div(
                 selectizeInput("license_code", "Code license", choices = license_choices,
-                               options = list(create = TRUE, placeholder = "Select or type…")),
+                               options = free_select_opts),
                 license_quick_picks("license_code", license_picks_code,
                   "MIT and Apache 2.0 are permissive; GPL-3.0 requires derived code to stay open.")
               ),
               div(
                 selectizeInput("license_data", "Data license", choices = license_choices,
-                               options = list(create = TRUE, placeholder = "Select or type…")),
+                               options = free_select_opts),
                 license_quick_picks("license_data", license_picks_data,
                   "Dryad requires CC0; Zenodo defaults to CC BY 4.0.")
               )
@@ -219,9 +320,20 @@ ui <- page_fluid(
       conditionalPanel("input.main_nav === 'tab_files'",
         layout_sidebar(fillable = FALSE,
           sidebar = sidebar(title = "Load a folder", width = 240,
-            shinyDirButton("folder_btn", "Browse for folder…",
-                           title = "Select your project folder",
-                           class = "btn-primary w-100", icon = icon("folder-open")),
+            # In the browser there is no disk to browse: the folder comes as a zip.
+            if (is_web)
+              tagList(
+                fileInput("zip_upload", NULL, accept = c(".zip", "application/zip"),
+                          buttonLabel = "Upload .zip…", placeholder = "Project folder"),
+                p(class = "small text-muted mb-0",
+                  "Zip your project folder (right-click › Compress, or ",
+                  "Send to › Compressed folder) and upload it. It is read in ",
+                  "your browser and never sent anywhere.")
+              )
+            else
+              shinyDirButton("folder_btn", "Browse for folder…",
+                             title = "Select your project folder",
+                             class = "btn-primary w-100", icon = icon("folder-open")),
             # Only when launched with build_readme(), which records the
             # caller's working directory (runApp() itself moves into the app).
             if (!is.null(getOption("READMEBuilder.launch")$wd))
@@ -315,7 +427,7 @@ ui <- page_fluid(
                 # "" first so the box starts (and is reset after "Add model") empty.
                 choices = c("", "Linear Regression", "Logistic Regression", "Correlation",
                             "ANOVA", "Mixed Model", "Other"),
-                options = list(create = TRUE, placeholder = "Select or type…")),
+                options = free_select_opts),
               textInput("model_methods_loc", "Methods location",
                         placeholder = "e.g. Methods, p.4, para 2")
             ),

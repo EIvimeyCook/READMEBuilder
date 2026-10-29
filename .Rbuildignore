@@ -3,3 +3,5 @@
 ^CITATION\.cff$
 ^LICENSE\.md$
 ^\.claude$
+^web$
+^\.github$
