@@ -478,31 +478,6 @@ skipped if it is not installed. Install it with `install.packages("jsonlite")`.
 - In the browser version, package versions come only from an `renv.lock` (see
   [Use it in your browser](#use-it-in-your-browser)).
 
-## Building the browser version
-
-The browser version is built from the same app code as the package
-(`inst/READMEBuilder`); the app switches to the browser's folder chooser and
-lockfile-only versions when it finds itself running in webR. To build and preview it locally
-(this needs the `shinylive` package):
-
-```r
-source("web/build.R")   # from the package root; writes web/_site (about 90 MB)
-```
-
-```bash
-python3 -m http.server 8765 --directory web/_site
-```
-
-Then open <http://localhost:8765>. The files have to be served: opening
-`index.html` directly does not work. Setting the environment variable
-`READMEBUILDER_WEB=true` makes the desktop app behave like the browser version,
-which is handy for testing.
-
-On GitHub, `.github/workflows/deploy-web.yml` builds the site and publishes it
-to GitHub Pages on every push to `main` or `development` (with **Settings ›
-Pages › Source** set to **GitHub Actions**). Neither `web/` nor the built site
-is part of the R package.
-
 ## Bug reports and contributions
 
 Please file issues and feature requests at
