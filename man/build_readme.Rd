@@ -57,12 +57,14 @@ download of \code{README.md}.
 
 The Files tab also has a \strong{Use working directory} button, which loads
 the folder \code{build_readme()} was called from (\code{getwd()}), so a
-project already open in your IDE does not have to be browsed to.
+project already open in your IDE does not have to be browsed to. A project
+can also be uploaded as a \code{.zip}.
 
 The same app also runs in a web browser without installing anything, at
-\url{https://eivimeycook.github.io/READMEBuilder/}. There the project is
-uploaded as a \code{.zip} (read inside the page, never sent anywhere) and
-package versions come only from the project's \code{renv.lock}.
+\url{https://eivimeycook.github.io/READMEBuilder/}. There the project folder
+is chosen with the browser's folder chooser or uploaded as a \code{.zip}
+(read inside the page, never sent anywhere), and package versions come only
+from the project's \code{renv.lock}.
 }
 \examples{
 \dontrun{

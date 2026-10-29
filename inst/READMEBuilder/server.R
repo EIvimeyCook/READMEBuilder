@@ -287,7 +287,7 @@ server <- function(input, output, session) {
     removeModal()
     import_file(NULL)
     reset_file_input("import_md")
-    if (is_web) reset_file_input("zip_upload")
+    reset_file_input("zip_upload")
     # title and contact are textInputs; the rest are textAreaInputs.
     updateTextInput(session, "title",   value = "")
     updateTextInput(session, "contact", value = "")
@@ -355,10 +355,11 @@ server <- function(input, output, session) {
         "README this app made, choose it here to carry on editing it."),
       help_step(2, "Files",
         if (is_web)
-          "Zip your project folder — the top level, not a subfolder — and upload it. Every "
+          paste0("Choose your project folder — the top level, not a subfolder — or ",
+                 "upload it as a .zip. Every ")
         else
-          paste0("Browse to your project folder — the top level, not a subfolder — or ",
-                 "click Use working directory. Every "),
+          paste0("Browse to your project folder — the top level, not a subfolder — ",
+                 "click Use working directory, or upload the folder as a .zip. Every "),
         "subfolder is scanned automatically. Spreadsheets and CSVs are summarised ",
         "column by column; add a description and units for each column."),
       help_step(3, "Script Order",
@@ -521,11 +522,44 @@ server <- function(input, output, session) {
       import_folder_readme()
   })
 
-  # Web mode: unzip into a folder named after the zip, then load it. Zipping a
-  # folder usually gives one top-level folder (plus macOS's __MACOSX and
-  # .DS_Store), so step into it when that is all there is. In the browser the
-  # unzipped files sit in memory, so only the loaded zip's copy is kept.
-  zip_dir <- NULL
+  # An uploaded folder (zip, or the browser's folder chooser) is rebuilt in a
+  # temporary directory and loaded from there. In the browser those files sit
+  # in memory, so only the loaded upload's copy is kept.
+  upload_dir <- NULL
+  load_upload <- function(root, dest) {
+    if (load_folder(dest)) {
+      if (!is.null(upload_dir)) unlink(upload_dir, recursive = TRUE)
+      upload_dir <<- root
+    } else {
+      unlink(root, recursive = TRUE)
+    }
+  }
+
+  # Browser version, Choose folder: the files arrive with their base names,
+  # and their paths inside the chosen folder ("my-study/data/obs.csv") arrive
+  # just before as input$folder_paths, in the same order. The folder is
+  # rebuilt from those paths; the first part is the chosen folder itself.
+  observeEvent(input$folder_upload, {
+    u     <- input$folder_upload
+    paths <- unlist(isolate(input$folder_paths))
+    rel   <- if (length(paths) == nrow(u) && all(basename(paths) == u$name)) paths else u$name
+    rel   <- str_replace_all(rel, fixed("\\"), "/")
+    safe <- !vapply(str_split(rel, "/"), function(p) any(p %in% c("", ".", "..")), logical(1))
+    root <- tempfile("rb_dir_")
+    for (i in which(safe)) {
+      to <- file.path(root, rel[i])
+      dir.create(dirname(to), recursive = TRUE, showWarnings = FALSE)
+      file.copy(u$datapath[i], to)
+      unlink(u$datapath[i])
+    }
+    top  <- unique(str_extract(rel[safe], "^[^/]+"))
+    dest <- if (length(top) == 1 && dir.exists(file.path(root, top))) file.path(root, top) else root
+    load_upload(root, dest)
+  })
+
+  # Zip upload: unzip into a folder named after the zip, then load it. Zipping
+  # a folder usually gives one top-level folder (plus macOS's __MACOSX and
+  # .DS_Store), so step into it when that is all there is.
   observeEvent(input$zip_upload, {
     z    <- input$zip_upload
     root <- tempfile("rb_zip_")
@@ -548,12 +582,7 @@ server <- function(input, output, session) {
     }
     top <- setdiff(list.files(dest, all.files = TRUE, no.. = TRUE), c("__MACOSX", ".DS_Store"))
     if (length(top) == 1 && dir.exists(file.path(dest, top))) dest <- file.path(dest, top)
-    if (load_folder(dest)) {
-      if (!is.null(zip_dir)) unlink(zip_dir, recursive = TRUE)
-      zip_dir <<- root
-    } else {
-      unlink(root, recursive = TRUE)
-    }
+    load_upload(root, dest)
   })
 
   output$folder_label <- renderUI({

@@ -151,6 +151,35 @@ ui <- page_fluid(
     });
   ")),
 
+  # Browser version, Choose folder: the browser's folder chooser gives every
+  # file with its path inside the folder (webkitRelativePath). Files in
+  # skipped folders (renv, .git, ...) and hidden files are dropped here, so a
+  # restored renv library is never read; the rest are handed to the hidden
+  # folder_upload input, their paths to input$folder_paths, and server.R
+  # rebuilds the folder.
+  if (is_web) tags$script(HTML("
+    $(document).on('change', '#folder_pick', function () {
+      const skip = /(^|\\/)(renv|packrat|\\.Rproj\\.user|\\.git|\\.Rcheck|node_modules|__pycache__|\\.venv|venv|\\.quarto|__MACOSX)(\\/|$)|(^|\\/)\\./;
+      const all  = Array.from(this.files);
+      const keep = all.filter(f => !skip.test(f.webkitRelativePath || f.name));
+      this.value = '';
+      if (!keep.length) {
+        Shiny.notifications.show({ type: 'warning', html: all.length ?
+          'No project files found: everything in that folder is in a skipped folder (renv, .git, …) or hidden.' :
+          'That folder is empty.' });
+        return;
+      }
+      // Shiny keeps only each upload's base name, so the paths go separately,
+      // in the same order as the files.
+      Shiny.setInputValue('folder_paths', keep.map(f => f.webkitRelativePath || f.name), { priority: 'event' });
+      const dt = new DataTransfer();
+      keep.forEach(f => dt.items.add(f));
+      const inp = document.getElementById('folder_upload');
+      inp.files = dt.files;
+      inp.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+  ")),
+
   # Browser version: remember across visits that the walkthrough was seen.
   if (is_web) tags$script(HTML("
     $(document).on('shiny:connected', function () {
@@ -320,15 +349,19 @@ ui <- page_fluid(
       conditionalPanel("input.main_nav === 'tab_files'",
         layout_sidebar(fillable = FALSE,
           sidebar = sidebar(title = "Load a folder", width = 240,
-            # In the browser there is no disk to browse: the folder comes as a zip.
+            # Both versions: pick a folder, or upload it as a zip. In the browser
+            # the folder is picked with the browser's own folder chooser (its
+            # files are read in the page, see the script below); the desktop
+            # app browses the disk directly.
             if (is_web)
               tagList(
-                fileInput("zip_upload", NULL, accept = c(".zip", "application/zip"),
-                          buttonLabel = "Upload .zip…", placeholder = "Project folder"),
-                p(class = "small text-muted mb-0",
-                  "Zip your project folder (right-click › Compress, or ",
-                  "Send to › Compressed folder) and upload it. It is read in ",
-                  "your browser and never sent anywhere.")
+                tags$label(class = "btn btn-primary w-100 mb-0", `for` = "folder_pick",
+                  icon("folder-open"), " Choose folder…",
+                  tags$input(id = "folder_pick", type = "file", multiple = NA,
+                             webkitdirectory = NA, style = "display:none")),
+                # Receives the picked folder's files, named by their path.
+                div(style = "display:none",
+                    fileInput("folder_upload", NULL, multiple = TRUE))
               )
             else
               shinyDirButton("folder_btn", "Browse for folder…",
@@ -341,6 +374,13 @@ ui <- page_fluid(
                 actionButton("use_wd", "Use working directory",
                              class = "btn-outline-primary w-100 mt-2",
                              icon = icon("location-crosshairs"))),
+            p(class = "small text-muted text-center my-2", "or"),
+            fileInput("zip_upload", NULL, accept = c(".zip", "application/zip"),
+                      buttonLabel = "Upload .zip…", placeholder = "Zipped folder"),
+            p(class = "small text-muted mb-0",
+              "Choose the top level of your project (not a subfolder). To upload a zip: right-click the folder › Compress (macOS) or ",
+              "Send to › Compressed folder (Windows).",
+              if (is_web) " Files are read in your browser and never sent anywhere."),
             br(),
             uiOutput("folder_label"),
             hr(),

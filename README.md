@@ -60,7 +60,8 @@ share (for example on Zenodo, Dryad, or GitHub).
 - **Runs entirely on your machine.** Files are read locally and never uploaded,
   in the R package and in the browser version alike.
 - **No-install browser version.** The same app [runs in a web
-  browser](#use-it-in-your-browser): upload your project as a `.zip`.
+  browser](#use-it-in-your-browser): choose your project folder, or upload it
+  as a `.zip`.
 
 ## Use it in your browser
 
@@ -74,17 +75,24 @@ running in the page itself. It is built from the `development` branch.
 
 To use it:
 
-1. Zip your project folder, the top level rather than a subfolder (on macOS:
-   right-click › **Compress**; on Windows: right-click › **Send to** ›
-   **Compressed (zipped) folder**).
-2. On the **Files** tab, click **Upload .zip…** and choose it. Zips of up to
-   500 MB are accepted.
-3. Work through the tabs as usual, then click **Download README.md**.
+1. On the **Files** tab, click **Choose folder…** and pick the top level of your
+   project (not a subfolder). Your browser may ask to confirm "uploading" the
+   files: that is its standard wording, but they are only read by the page.
+   Alternatively, zip the folder (on macOS: right-click › **Compress**; on
+   Windows: right-click › **Send to** › **Compressed (zipped) folder**) and use
+   **Upload .zip…**; zips of up to 500 MB are accepted.
+2. Work through the tabs as usual, then click **Download README.md**.
+
+Folders such as `renv/` and `.git/`, and hidden files, are left out before
+anything is read, so choosing a project with a restored `renv` library stays
+fast.
 
 How it differs from the R package:
 
-- **Folders arrive as a zip.** There is no folder browser and no **Use working
-  directory** button, since the browser cannot see your disk.
+- **No Use working directory, and no opening a folder by path.** A web page
+  cannot see your disk on its own, so you choose the folder (or a zip) each
+  time; `build_readme("folder")` and **Use working directory** exist only in
+  the R package.
 - **Package versions come only from an `renv.lock`.** The browser cannot see
   the packages installed on your computer, so packages missing from the lockfile
   are listed as `not recorded`, and the R version is shown as `—` unless the
@@ -151,7 +159,7 @@ flowchart TD
     F["build_readme('my-project')<br/>build_readme(here::here())"] ---> C
     G["build_readme(edit_readme = TRUE)<br/>build_readme('my-project',<br/>edit_readme = TRUE)"] ----> D
     W["Browser version"] --> B
-    B -- "Files tab: Browse<br/>or Use working directory<br/>(browser: upload a .zip)" --> C["Folder loaded"]
+    B -- "Files tab: Browse, Use working<br/>directory, or upload a .zip<br/>(browser: Choose folder or .zip)" --> C["Folder loaded"]
     B -- "Project Info tab:<br/>upload README.md" --> E["README loaded,<br/>no folder needed"]
     C -- "Files tab: Load README<br/>(if READMEBuilder made it)" --> D["Folder + its README loaded"]
     C --> H["Fill in the tabs,<br/>then Preview & Export"]
@@ -180,8 +188,9 @@ across the top on a phone):
    [Editing an existing README](#editing-an-existing-readme)).
 2. **Files:** browse to your project folder, or click **Use working directory**
    to load the folder `build_readme()` was called from (handy when the project
-   is already open in RStudio, Positron, VS Code or similar). In the browser
-   version, upload the folder as a `.zip` instead. A directory map of the folder
+   is already open in RStudio, Positron, VS Code or similar), or upload the
+   folder as a `.zip`. In the browser version, click **Choose folder…** or upload
+   a `.zip`. A directory map of the folder
    is shown and included in the export. Tabular files are described
    automatically (see [What gets auto-detected](#what-gets-auto-detected)); add a
    description for each column (and units for numeric columns), plus the date(s)
@@ -435,8 +444,8 @@ package resolution all happen locally, and nothing you load is uploaded to any
 server.
 
 The [browser version](#use-it-in-your-browser) works the same way: the web page
-contains R itself (webR), and your zip is unpacked and read inside the page. The
-website only supplies the app's files; it never receives yours.
+contains R itself (webR), and the folder you choose (or your zip) is read inside
+the page. The website only supplies the app's files; it never receives yours.
 
 The one exception is cosmetic. The app's theme asks your browser to load the
 Inter font from Google Fonts. No file data is included in that request, and if
@@ -470,8 +479,8 @@ skipped if it is not installed. Install it with `install.packages("jsonlite")`.
 ## Building the browser version
 
 The browser version is built from the same app code as the package
-(`inst/READMEBuilder`); the app switches to zip upload and lockfile-only
-versions when it finds itself running in webR. To build and preview it locally
+(`inst/READMEBuilder`); the app switches to the browser's folder chooser and
+lockfile-only versions when it finds itself running in webR. To build and preview it locally
 (this needs the `shinylive` package):
 
 ```r

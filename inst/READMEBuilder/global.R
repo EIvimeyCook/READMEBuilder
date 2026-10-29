@@ -39,9 +39,13 @@ logo_svg <- tags$img(
 current_r_version <- function()
   if (is_web) "—" else paste0(R.version$major, ".", R.version$minor)
 
-# Paths to show the user. In the browser a folder lives in a temp directory,
-# so only its name means anything.
-show_path <- function(p) if (is_web) basename(p) else p
+# Paths to show the user. An uploaded folder (zip or browser folder chooser,
+# and every folder in the browser) lives in a temporary directory, so only its
+# name means anything.
+show_path <- function(p) {
+  tmp <- normalizePath(tempdir(), winslash = "/", mustWork = FALSE)
+  if (is_web || startsWith(normalizePath(p, winslash = "/", mustWork = FALSE), tmp)) basename(p) else p
+}
 
 # ── DOI and badge helpers ─────────────────────────────────────────────────────
 # Split the DOI field on ";" or new lines and strip any resolver prefix a user

@@ -7,11 +7,14 @@ Version 0.2.1, on the `development` branch. The stable version on `main` is
 
 * **Browser version.** The app now also runs in a web browser with nothing to
   install, at <https://eivimeycook.github.io/READMEBuilder/>. It is the same app
-  running in webR (via Shinylive): the project folder is uploaded as a `.zip`
-  and read inside the page, so files are never sent anywhere. Package versions
+  running in webR (via Shinylive): choose the project folder with
+  **Choose folder…** (or upload it as a `.zip`), and it is read inside the page,
+  so files are never sent anywhere. Package versions
   come from the project's `renv.lock`; packages it does not list are marked
   `not recorded`. Built by `web/build.R` and published by a GitHub Actions
   workflow; neither is part of the R package.
+* The desktop app can also load a project uploaded as a `.zip` (**Upload
+  .zip…** on the Files tab), so both versions offer a folder and a zip.
 * The **Download README.md** button now floats in the bottom-right corner on
   every tab, instead of sitting off to the right in the Preview card.
 * Packages are scanned as soon as a folder is loaded, so the README has its
