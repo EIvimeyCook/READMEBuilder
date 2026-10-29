@@ -151,32 +151,69 @@ ui <- page_fluid(
     });
   ")),
 
-  # Browser version, Choose folder: the browser's folder chooser gives every
-  # file with its path inside the folder (webkitRelativePath). Files in
-  # skipped folders (renv, .git, ...) and hidden files are dropped here, so a
-  # restored renv library is never read; the rest are handed to the hidden
-  # folder_upload input, their paths to input$folder_paths, and server.R
-  # rebuilds the folder.
+  # Browser version, Choose folder. Where the browser has the File System
+  # Access API (Chrome, Edge), showDirectoryPicker() is used: its prompt asks
+  # to let the site VIEW the folder's files, which is what happens, whereas a
+  # folder <input> makes Chrome ask whether to "upload" them. Skipped folders
+  # (renv, .git, ...) are then never even opened. Elsewhere (Firefox, Safari)
+  # the folder <input> is used and gives each file's path as
+  # webkitRelativePath. Either way skipped and hidden files are dropped, the
+  # rest go to the hidden folder_upload input with their paths in
+  # input$folder_paths, and server.R rebuilds the folder.
   if (is_web) tags$script(HTML("
-    $(document).on('change', '#folder_pick', function () {
-      const skip = /(^|\\/)(renv|packrat|\\.Rproj\\.user|\\.git|\\.Rcheck|node_modules|__pycache__|\\.venv|venv|\\.quarto|__MACOSX)(\\/|$)|(^|\\/)\\./;
-      const all  = Array.from(this.files);
-      const keep = all.filter(f => !skip.test(f.webkitRelativePath || f.name));
-      this.value = '';
-      if (!keep.length) {
-        Shiny.notifications.show({ type: 'warning', html: all.length ?
+    const rbSkipDir = /^(renv|packrat|\\.Rproj\\.user|\\.git|\\.Rcheck|node_modules|__pycache__|\\.venv|venv|\\.quarto|__MACOSX)$/;
+    const rbSkipPath = /(^|\\/)(renv|packrat|\\.Rproj\\.user|\\.git|\\.Rcheck|node_modules|__pycache__|\\.venv|venv|\\.quarto|__MACOSX)(\\/|$)|(^|\\/)\\./;
+
+    // items: [{ file, path }], path including the chosen folder's name.
+    function rbLoadFiles(items, nAll) {
+      if (!items.length) {
+        Shiny.notifications.show({ type: 'warning', html: nAll ?
           'No project files found: everything in that folder is in a skipped folder (renv, .git, …) or hidden.' :
           'That folder is empty.' });
         return;
       }
       // Shiny keeps only each upload's base name, so the paths go separately,
       // in the same order as the files.
-      Shiny.setInputValue('folder_paths', keep.map(f => f.webkitRelativePath || f.name), { priority: 'event' });
+      Shiny.setInputValue('folder_paths', items.map(it => it.path), { priority: 'event' });
       const dt = new DataTransfer();
-      keep.forEach(f => dt.items.add(f));
+      items.forEach(it => dt.items.add(it.file));
       const inp = document.getElementById('folder_upload');
       inp.files = dt.files;
       inp.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+
+    // Walks a directory handle, skipping excluded and hidden entries.
+    async function rbWalk(dir, prefix, out, count) {
+      for await (const [name, h] of dir.entries()) {
+        count.n++;
+        if (name.startsWith('.') || (h.kind === 'directory' && rbSkipDir.test(name))) continue;
+        if (h.kind === 'directory') await rbWalk(h, prefix + name + '/', out, count);
+        else out.push({ file: await h.getFile(), path: prefix + name });
+      }
+    }
+
+    $(document).on('click', 'label[for=folder_pick]', async function (e) {
+      if (!window.showDirectoryPicker) return;          // default: the folder <input>
+      e.preventDefault();
+      let dir;
+      try {
+        dir = await window.showDirectoryPicker({ mode: 'read', id: 'readmebuilder' });
+      } catch (err) {
+        if (err && err.name === 'AbortError') return;    // the user cancelled
+        document.getElementById('folder_pick').click();  // not allowed here: fall back
+        return;
+      }
+      const items = [], count = { n: 0 };
+      await rbWalk(dir, dir.name + '/', items, count);
+      rbLoadFiles(items, count.n);
+    });
+
+    $(document).on('change', '#folder_pick', function () {
+      const all = Array.from(this.files);
+      this.value = '';
+      const items = all.map(f => ({ file: f, path: f.webkitRelativePath || f.name }))
+                       .filter(it => !rbSkipPath.test(it.path));
+      rbLoadFiles(items, all.length);
     });
   ")),
 
@@ -380,7 +417,9 @@ ui <- page_fluid(
             p(class = "small text-muted mb-0",
               "Choose the top level of your project (not a subfolder). To upload a zip: right-click the folder › Compress (macOS) or ",
               "Send to › Compressed folder (Windows).",
-              if (is_web) " Files are read in your browser and never sent anywhere."),
+              if (is_web) tagList(" ", strong("Your files stay on your computer:"),
+                " they are read by this page and never sent anywhere, even if your ",
+                "browser's prompt says \"upload\".")),
             br(),
             uiOutput("folder_label"),
             hr(),

@@ -76,8 +76,10 @@ running in the page itself. It is built from the `development` branch.
 To use it:
 
 1. On the **Files** tab, click **Choose folder…** and pick the top level of your
-   project (not a subfolder). Your browser may ask to confirm "uploading" the
-   files: that is its standard wording, but they are only read by the page.
+   project (not a subfolder). Chrome and Edge then ask whether to let the site
+   *view* the folder's files (read-only); other browsers just open a folder
+   chooser. If a browser's prompt mentions "uploading", that is only its
+   standard wording: the files are read by the page and never sent anywhere.
    Alternatively, zip the folder (on macOS: right-click › **Compress**; on
    Windows: right-click › **Send to** › **Compressed (zipped) folder**) and use
    **Upload .zip…**; zips of up to 500 MB are accepted.
