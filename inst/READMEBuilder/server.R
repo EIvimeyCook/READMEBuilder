@@ -355,8 +355,8 @@ server <- function(input, output, session) {
         "README this app made, choose it here to carry on editing it."),
       help_step(2, "Files",
         if (is_web)
-          paste0("Choose your project folder — the top level, not a subfolder — or ",
-                 "upload it as a .zip. Every ")
+          paste0("Drag your project folder — the top level, not a subfolder — onto ",
+                 "the box (or use Choose folder…, or a .zip). Every ")
         else
           paste0("Browse to your project folder — the top level, not a subfolder — ",
                  "click Use working directory, or upload the folder as a .zip. Every "),

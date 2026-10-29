@@ -60,8 +60,8 @@ share (for example on Zenodo, Dryad, or GitHub).
 - **Runs entirely on your machine.** Files are read locally and never uploaded,
   in the R package and in the browser version alike.
 - **No-install browser version.** The same app [runs in a web
-  browser](#use-it-in-your-browser): choose your project folder, or upload it
-  as a `.zip`.
+  browser](#use-it-in-your-browser): drag your project folder (or a `.zip`)
+  onto the page.
 
 ## Use it in your browser
 
@@ -75,14 +75,16 @@ read by R running in the page itself. It is built from the `development` branch.
 
 To use it:
 
-1. On the **Files** tab, click **Choose folder…** and pick the top level of your
-   project (not a subfolder). Chrome and Edge then ask whether to let the site
-   *view* the folder's files (read-only); other browsers just open a folder
-   chooser. If a browser's prompt mentions "uploading", that is only its
-   standard wording: the files are read by the page and never sent anywhere.
-   Alternatively, zip the folder (on macOS: right-click › **Compress**; on
-   Windows: right-click › **Send to** › **Compressed (zipped) folder**) and use
-   **Upload .zip…**; zips of up to 500 MB are accepted.
+1. On the **Files** tab, drag the top level of your project folder (not a
+   subfolder) from Finder or File Explorer onto the **Drag your project folder
+   here** box. You can also click **Choose folder…**, but browsers then ask
+   whether to "upload" the files (Safari always, Chrome and Edge in some
+   set-ups). That is only their standard wording for letting a page read a
+   folder: the files are read by the page and never sent anywhere. Dragging
+   avoids the prompt. A zipped folder works too: drop it on the same box or use
+   **Upload .zip…** (up to 500 MB). To zip a folder on macOS: right-click ›
+   **Compress**; on Windows: right-click › **Send to** › **Compressed (zipped)
+   folder**.
 2. Work through the tabs as usual, then click **Download README.md**.
 
 Folders such as `renv/` and `.git/`, and hidden files, are left out before
@@ -161,7 +163,7 @@ flowchart TD
     F["build_readme('my-project')<br/>build_readme(here::here())"] ---> C
     G["build_readme(edit_readme = TRUE)<br/>build_readme('my-project',<br/>edit_readme = TRUE)"] ----> D
     W["Browser version"] --> B
-    B -- "Files tab: Browse, Use working<br/>directory, or upload a .zip<br/>(browser: Choose folder or .zip)" --> C["Folder loaded"]
+    B -- "Files tab: Browse, Use working<br/>directory, or upload a .zip<br/>(browser: drag in a folder or .zip)" --> C["Folder loaded"]
     B -- "Project Info tab:<br/>upload README.md" --> E["README loaded,<br/>no folder needed"]
     C -- "Files tab: Load README<br/>(if READMEBuilder made it)" --> D["Folder + its README loaded"]
     C --> H["Fill in the tabs,<br/>then Preview & Export"]
@@ -191,8 +193,9 @@ across the top on a phone):
 2. **Files:** browse to your project folder, or click **Use working directory**
    to load the folder `build_readme()` was called from (handy when the project
    is already open in RStudio, Positron, VS Code or similar), or upload the
-   folder as a `.zip`. In the browser version, click **Choose folder…** or upload
-   a `.zip`. A directory map of the folder
+   folder as a `.zip`. In the browser version, drag the folder (or a `.zip`)
+   onto the drop box, or use **Choose folder…** or **Upload .zip…**. A
+   directory map of the folder
    is shown and included in the export. Tabular files are described
    automatically (see [What gets auto-detected](#what-gets-auto-detected)); add a
    description for each column (and units for numeric columns), plus the date(s)

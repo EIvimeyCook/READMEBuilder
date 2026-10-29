@@ -117,6 +117,10 @@ ui <- page_fluid(
     .rb-chip { padding: 0.1rem 0.55rem; font-size: 0.78rem; margin: 0 0.25rem 0.25rem 0; }
     /* Wrap long paragraphs instead of one very wide sideways-scrolling line. */
     #preview { white-space: pre-wrap; overflow-wrap: anywhere; }
+    /* Browser version: the drop zone for a project folder. */
+    .rb-drop { border: 2px dashed #9fb3c2; border-radius: 8px; padding: 0.9rem 0.5rem;
+               text-align: center; color: #1a3a52; background: #fff; line-height: 1.5; }
+    .rb-drop.rb-drop-over { border-color: #2196a6; background: #e8f4f6; }
     /* Script descriptions fill their card rather than a fixed 300px. */
     #script_order_ui .flex-grow-1 { min-width: 0; }
     #script_order_ui .shiny-input-container, #script_order_ui textarea { width: 100% !important; }
@@ -214,6 +218,58 @@ ui <- page_fluid(
       const items = all.map(f => ({ file: f, path: f.webkitRelativePath || f.name }))
                        .filter(it => !rbSkipPath.test(it.path));
       rbLoadFiles(items, all.length);
+    });
+
+    // Drag and drop: a dropped folder is walked with webkitGetAsEntry()
+    // (supported by every current browser), skipping excluded and hidden
+    // entries without opening them. A dropped .zip goes to the zip upload.
+    function rbReadAll(reader) {           // readEntries() returns batches
+      return new Promise((resolve, reject) => {
+        const all = [];
+        const next = () => reader.readEntries(batch => {
+          if (!batch.length) return resolve(all);
+          all.push(...batch); next();
+        }, reject);
+        next();
+      });
+    }
+    async function rbWalkEntry(entry, out, count) {
+      count.n++;
+      if (entry.name.startsWith('.') || (entry.isDirectory && rbSkipDir.test(entry.name))) return;
+      if (entry.isDirectory) {
+        for (const child of await rbReadAll(entry.createReader())) await rbWalkEntry(child, out, count);
+      } else {
+        const file = await new Promise((res, rej) => entry.file(res, rej));
+        out.push({ file: file, path: entry.fullPath.replace(/^\\//, '') });
+      }
+    }
+    $(document).on('dragenter dragover', '#folder_drop', function (e) {
+      e.preventDefault(); $(this).addClass('rb-drop-over');
+    });
+    $(document).on('dragleave', '#folder_drop', function () { $(this).removeClass('rb-drop-over'); });
+    $(document).on('drop', '#folder_drop', async function (e) {
+      e.preventDefault(); $(this).removeClass('rb-drop-over');
+      const dt = e.originalEvent.dataTransfer;
+      const entries = Array.from(dt.items || []).map(it => it.webkitGetAsEntry && it.webkitGetAsEntry()).filter(Boolean);
+      // A single .zip: hand it to the zip upload.
+      if (entries.length === 1 && entries[0].isFile && /\\.zip$/i.test(entries[0].name)) {
+        const zt = new DataTransfer(); zt.items.add(dt.files[0]);
+        const zin = document.getElementById('zip_upload');
+        zin.files = zt.files; zin.dispatchEvent(new Event('change', { bubbles: true }));
+        return;
+      }
+      if (!entries.length || (entries.length > 1 || !entries[0].isDirectory)) {
+        Shiny.notifications.show({ type: 'warning',
+          html: 'Drop one project folder (the top level), or a single .zip.' });
+        return;
+      }
+      const items = [], count = { n: 0 };
+      await rbWalkEntry(entries[0], items, count);
+      rbLoadFiles(items, count.n - 1);        // not counting the folder itself
+    });
+    // Dropping anywhere else must not make the browser open the file.
+    $(document).on('dragover drop', function (e) {
+      if (!$(e.target).closest('#folder_drop').length) e.preventDefault();
     });
   ")),
 
@@ -392,7 +448,13 @@ ui <- page_fluid(
             # app browses the disk directly.
             if (is_web)
               tagList(
-                tags$label(class = "btn btn-primary w-100 mb-0", `for` = "folder_pick",
+                # Dropping a folder needs no "upload" confirmation in any
+                # browser, unlike the folder chooser below.
+                div(id = "folder_drop", class = "rb-drop mb-2",
+                  icon("folder-open", class = "fa-lg"), br(),
+                  strong("Drag your project folder here"), br(),
+                  tags$span(class = "small", "(or a .zip)")),
+                tags$label(class = "btn btn-outline-primary w-100 mb-0", `for` = "folder_pick",
                   icon("folder-open"), " Choose folder…",
                   tags$input(id = "folder_pick", type = "file", multiple = NA,
                              webkitdirectory = NA, style = "display:none")),
@@ -418,8 +480,9 @@ ui <- page_fluid(
               "Choose the top level of your project (not a subfolder). To upload a zip: right-click the folder › Compress (macOS) or ",
               "Send to › Compressed folder (Windows).",
               if (is_web) tagList(" ", strong("Your files stay on your computer:"),
-                " they are read by this page and never sent anywhere, even if your ",
-                "browser's prompt says \"upload\".")),
+                " they are read by this page and never sent anywhere. Choose folder… ",
+                "may make your browser ask to \"upload\" the files (its standard ",
+                "wording); dragging the folder in avoids that prompt.")),
             br(),
             uiOutput("folder_label"),
             hr(),
