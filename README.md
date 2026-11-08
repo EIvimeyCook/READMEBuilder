@@ -56,7 +56,7 @@ share (for example on Zenodo, Dryad, or GitHub).
   it also opens automatically the first time you run the app.
 - **Re-open and edit.** Import a README the app made earlier and continue where
   you left off, without the original data folder. Exporting and re-importing
-  gives back exactly what you entered.
+  gives back what you entered.
 - **Runs entirely on your machine.** Files are read locally and never uploaded,
   in the R package and in the browser version alike.
 - **No-install browser version.** The same app [runs in a web
@@ -87,9 +87,11 @@ To use it:
    folder**.
 2. Work through the tabs as usual, then click **Download README.md**.
 
-Folders such as `renv/` and `.git/`, and hidden files, are left out before
-anything is read, so choosing a project with a restored `renv` library stays
-fast.
+When you drag or choose a folder, folders such as `renv/` and `.git/`, and
+hidden files, are left out before anything is read, so a project with a
+restored `renv` library stays fast. A `.zip` is uploaded and unpacked in full
+before those files are dropped, so leave `renv/library` out of the zip, or drag
+the folder instead.
 
 How it differs from the R package:
 
@@ -246,8 +248,10 @@ Each column in a tabular file gets an automatic summary:
 | Date / datetime | min–max range and `NA`s |
 | Logical | counts of `TRUE`, `FALSE`, and `NA` |
 
-Files that look tabular by extension but do not parse cleanly are quietly
-skipped and listed under **Other Files** for a free-text description instead.
+A `.txt` file that is not a tab-delimited table is listed under **Other Files**
+for a free-text description. Any other tabular file that cannot be read (for
+example an empty `.csv` or a corrupt `.xlsx`) stays under **Data Files** without
+a variable table, and you can still give it a free-text description.
 A `.txt` file is only treated as a table if it is tab-delimited, so prose notes
 are not summarised as fake tables. A file with a header row but no data still
 gets its columns listed (marked "no data rows"), and CSVs saved by Excel on
@@ -316,8 +320,8 @@ Scripts should be run in the following order:
 The **Source** column reads `renv.lock` for versions taken from the lockfile,
 `installed` for versions installed on the machine that generated the README,
 `not installed`, or (in the browser version) `not recorded` for packages the
-lockfile does not list. If a project mixes sources, a note under the table says
-so.
+lockfile does not list. If a project mixes versions from `renv.lock` with other
+sources, or any package is `not recorded`, a note above the table says so.
 
 Text you type is written as Markdown, so you can use links, lists, code blocks
 and so on. A single line break inside a paragraph is kept as a line break when
@@ -417,12 +421,15 @@ recorded models, and the R / package versions) so you can edit and re-export
 *without* needing the original data folder. **Clear** resets everything to a
 blank README, after asking.
 
-Exporting a README and importing it again gives back exactly what you entered,
+Exporting a README and importing it again gives back what you entered,
 including multi-line descriptions, code blocks, and text containing Markdown
 headings, `---`, `<...>`, or lines that look like the README's own structure
 (such as `## Description` or `**Location:**`). Such text is escaped with a
 backslash in the export, so GitHub shows it as you typed it and the importer
-does not mistake it for a section; the escape is removed again on import.
+does not mistake it for a section; the escape is removed again on import. The
+only changes are tidying: blank lines and spaces at the very start or end of a
+field are trimmed, DOIs are reduced to the bare DOI, and bullets you typed in
+author, affiliation and funder lists are removed.
 
 Importing replaces what is in the form, so the app asks first whenever the form
 already has content, and also if the file does not look like a README made by
@@ -499,8 +506,8 @@ When you file an issue, please include the output of
 
 If READMEBuilder helps with your work, please cite it:
 
-> Ivimey-Cook, E. R. (2026). *READMEBuilder: Build high-quality READMEs for
-> reproducible research* R package.
+> Ivimey-Cook, E. R. (2026). *READMEBuilder: Guided README Generation for
+> Reproducible Research* (version 0.2.1) [R package].
 > <https://github.com/EIvimeyCook/READMEBuilder>
 
 A machine-readable [`CITATION.cff`](CITATION.cff) is included, so GitHub's
