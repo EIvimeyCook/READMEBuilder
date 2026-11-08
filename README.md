@@ -96,7 +96,8 @@ shown in the left-hand navigation:
 2. **Files:** browse to your project folder. A directory map of the folder is
    shown and included in the export. Tabular files are described automatically
    (see [What gets auto-detected](#what-gets-auto-detected)); add a description
-   and a unit for each column, plus the date(s) and location of data collection.
+   for each column (and units for numeric columns), plus the date(s) and location
+   of data collection.
 3. **Script Order:** reorder your code with the up/down arrows to record the
    sequence it should be run in, and add a short description of what each script
    does.  
@@ -130,8 +131,11 @@ Each column in a tabular file gets an automatic summary:
 | Date / datetime | min–max range and `NA`s |
 | Logical | counts of `TRUE`, `FALSE`, and `NA` |
 
-Files that look tabular by extension but do not parse cleanly (for example a
-prose `.txt`) are quietly skipped and offered as free-text instead.
+A `.txt` file is always read as tab-separated, so a prose `.txt` is summarised as
+a one-column table with its first line as the column name (fixed in the
+development version). A tabular file that cannot be read at all, such as an
+empty `.csv` or a corrupt `.xlsx`, is listed under **Data Files** with no
+variable table; you can still give it a free-text description.
 
 ## What the output looks like
 
@@ -146,8 +150,8 @@ MyProject/
 ├── data/
 │   └── data.csv
 ├── analysis.R
-├── report.Rmd
-└── README.md
+├── README.md
+└── report.Rmd
 ````
 
 Each tabular file gets a variable table:
@@ -267,9 +271,11 @@ recorded models, and the R / package versions) so you can edit and re-export
 
 The importer is deliberately tolerant of older or hand-edited files (for example
 a `## Funders` or `## Funding` heading, and single- or split-licence wording).
-File-level content is reconstructed from the README itself; to refresh the
+File-level content is reconstructed from the README itself. To refresh the
 auto-summaries from the underlying data, re-load the project folder on the
-**Files** tab.
+**Files** tab. Note that this clears the imported file, column and script
+descriptions, units, dates, locations, package table and R version; project info
+and models are kept. The development version keeps them.
 
 ## Privacy
 
@@ -278,10 +284,11 @@ files and their contents stay on your machine: folder browsing, file reading, an
 package resolution all happen locally, and nothing you load is uploaded to any
 server.
 
-The one exception is cosmetic. The app's theme uses the Inter font from Google
-Fonts, so on first launch it fetches that font from Google's servers (and caches
-it afterwards). No file data is included in that request. If you want zero
-external calls, swap the theme to a system font.
+The one exception is the theme font. The app uses the Inter font from Google
+Fonts, so the first launch downloads it from Google's servers and caches it. No
+file data is included in that request, but the first launch does need an
+internet connection: without one the app page fails to load. The development
+version falls back to your system font instead.
 
 ## Requirements
 
@@ -300,9 +307,15 @@ not installed).
 - A column's **description** and **units** are typed by you; only the **summary**
   column is generated automatically.
 - Importing reloads metadata and structure but not the data itself. Re-load the
-  folder if you want summaries recomputed from current files.
+  folder if you want summaries recomputed from current files (this clears the
+  imported descriptions; see [Editing an existing README](#editing-an-existing-readme)).
 - The **Models** tab is filled in by you. Only the code location can be
   suggested automatically, and only for scripts in the loaded folder.
+- Citation text is only exported if you also enter at least one DOI; without a
+  DOI it is left out of the README (fixed in the development version).
+- Only the first sheet of an Excel workbook is summarised, and the README does
+  not mention any other sheets. Semicolon-delimited CSVs are read as a single
+  column. The development version handles both.
 
 ## Bug reports and contributions
 
@@ -320,8 +333,8 @@ When you file an issue, please include the output of
 
 If READMEBuilder helps with your work, please cite it:
 
-> Ivimey-Cook, E. R. (2026). *READMEBuilder: Build high-quality READMEs for
-> reproducible research* R package.
+> Ivimey-Cook, E. R. (2026). *READMEBuilder: Guided README Generation for
+> Reproducible Research* (version 0.2.0) [R package].
 > <https://github.com/EIvimeyCook/READMEBuilder>
 
 A machine-readable [`CITATION.cff`](CITATION.cff) is included, so GitHub's
