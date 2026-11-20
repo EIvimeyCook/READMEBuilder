@@ -1,0 +1,12 @@
+url: https://eivimeycook.github.io/READMEBuilder/
+template:
+  bootstrap: 5
+navbar:
+  structure:
+    left: [intro, webapp, reference, articles, tutorials, news]
+  components:
+    webapp:
+      text: Web app
+      icon: fa-globe
+      href: https://eivimeycook.github.io/READMEBuilder/app/
+      aria-label: Open the web app

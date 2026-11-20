@@ -6,7 +6,7 @@ Version 0.2.1, on the `development` branch. The stable version on `main` is
 ## New features
 
 * **Browser version.** The app now also runs in a web browser with nothing to
-  install, at <https://eivimeycook.github.io/READMEBuilder/>. It is the same app
+  install, at <https://eivimeycook.github.io/READMEBuilder/app/>. It is the same app
   running in webR (via Shinylive): drag the project folder (or a `.zip`) onto
   the Files tab, or use **Choose folder…** or **Upload .zip…**, and it is read
   inside the page, so files are never sent anywhere. Package versions

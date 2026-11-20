@@ -1,0 +1,25 @@
+/* The README already shows the logo centred above the title, so hide the
+   extra copy pkgdown adds beside the title on the home page. */
+.template-home img.logo {
+  display: none;
+}
+
+.template-home .page-header {
+  border-bottom: none;
+  text-align: center;
+}
+
+/* GitHub-style callouts ("> [!IMPORTANT]"), converted by extra.js */
+blockquote.gh-alert {
+  border-left-width: 4px;
+  padding: 0.75rem 1rem;
+}
+
+blockquote.gh-alert p:last-child {
+  margin-bottom: 0;
+}
+
+.gh-alert-title {
+  font-weight: 600;
+  margin-bottom: 0.25rem;
+}

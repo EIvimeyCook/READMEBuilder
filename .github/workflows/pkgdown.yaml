@@ -1,0 +1,55 @@
+# Builds the website on every push to development and publishes it to GitHub
+# Pages (Settings > Pages > Source: "GitHub Actions"). The site has two parts:
+#   /      the pkgdown documentation site
+#   /app/  the browser version of the app (Shinylive, built by web/build.R)
+# Local preview: pkgdown::build_site(), then Rscript web/build.R
+name: pkgdown
+
+on:
+  push:
+    branches: [development]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: r-lib/actions/setup-pandoc@v2
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          use-public-rspm: true
+      - uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          extra-packages: any::pkgdown, any::shinylive, any::jsonlite, local::.
+          needs: website
+      - name: Build documentation site
+        run: Rscript -e 'pkgdown::build_site_github_pages(new_process = FALSE, install = FALSE)'
+      - name: Build web app into /app/
+        run: |
+          Rscript web/build.R
+          cp -R web/_site docs/app
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

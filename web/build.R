@@ -9,8 +9,8 @@
 #
 # Needs the shinylive package. The output is ~90 MB, almost all webR itself,
 # so it is git-ignored and never part of the R package (see .Rbuildignore).
-# On GitHub, .github/workflows/deploy-web.yml runs this and publishes the
-# result to GitHub Pages.
+# On GitHub, .github/workflows/pkgdown.yaml runs this after building the
+# pkgdown site and publishes the app at /app/ on GitHub Pages.
 
 app <- file.path("inst", "READMEBuilder")
 if (!dir.exists(app)) stop("Run web/build.R from the READMEBuilder package root.")

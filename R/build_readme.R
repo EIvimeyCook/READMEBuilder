@@ -35,7 +35,7 @@
 #' uploaded with \strong{Upload .zip}.
 #'
 #' The same app also runs in a web browser without installing anything, at
-#' \url{https://eivimeycook.github.io/READMEBuilder/}. There the project folder
+#' \url{https://eivimeycook.github.io/READMEBuilder/app/}. There the project folder
 #' is chosen with the browser's folder chooser or uploaded as a \code{.zip}
 #' (read inside the page, never sent anywhere), and package versions come only
 #' from the project's \code{renv.lock}.

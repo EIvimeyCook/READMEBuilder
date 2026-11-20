@@ -1,10 +1,8 @@
 <p align="center">
-  <img src="https://github.com/EIvimeyCook/READMEBuilder/blob/main/man/figures/logo.png" width = "200"/>
+  <a href="https://eivimeycook.github.io/READMEBuilder/"><img src="man/figures/logo.png" width="200" alt="READMEBuilder logo"/></a>
 </p>
 
-<div align="center">
- <h1>READMEBuilder</h1>
-</div>
+<h1 align="center">READMEBuilder</h1>
 
 <!-- badges: start -->
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE.md)
@@ -65,7 +63,7 @@ share (for example on Zenodo, Dryad, or GitHub).
 
 ## Use it in your browser
 
-**<https://eivimeycook.github.io/READMEBuilder/>**
+**<https://eivimeycook.github.io/READMEBuilder/app/>**
 
 The browser version is the same app, running entirely inside your browser
 (through [Shinylive](https://posit-dev.github.io/r-shinylive/) and
