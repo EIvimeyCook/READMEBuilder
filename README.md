@@ -508,7 +508,7 @@ If READMEBuilder helps with your work, please cite it:
 > Reproducible Research* (version 0.2.1) [R package].
 > <https://github.com/EIvimeyCook/READMEBuilder>
 
-A machine-readable [`CITATION.cff`](CITATION.cff) is included, so GitHub's
+A machine-readable [`CITATION.cff`](https://github.com/EIvimeyCook/READMEBuilder/blob/HEAD/CITATION.cff) is included, so GitHub's
 "Cite this repository" button gives formatted APA and BibTeX.
 
 ## License

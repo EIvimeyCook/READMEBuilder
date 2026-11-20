@@ -10,3 +10,12 @@ navbar:
       icon: fa-globe
       href: https://eivimeycook.github.io/READMEBuilder/app/
       aria-label: Open the web app
+
+reference:
+  - title: Build a README
+    desc: >
+      READMEBuilder has one function, which opens the app. The same app also
+      runs in a web browser, with nothing to install: see the Web app link
+      above.
+    contents:
+      - build_readme
